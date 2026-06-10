@@ -2276,3 +2276,114 @@ export const getAllFertilizerScheduleTasks = async (): Promise<PlantFertilizer[]
   return getPlantFertilizers();
 };
 
+export const importSampleDataToSupabase = async (): Promise<{ success: boolean; error: Error | null }> => {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: new Error("Not authenticated") };
+
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: new Error("Supabase is not configured") };
+  }
+
+  try {
+    const userId = user.id;
+
+    // 1. Get default mock data
+    const mockGardens = DEFAULT_GARDENS(userId);
+    const mockPlants = DEFAULT_PLANTS(userId);
+    const mockActivities = DEFAULT_ACTIVITIES(userId);
+    const mockSchedules = DEFAULT_SCHEDULES(userId);
+
+    // 2. Maps to store UUID mappings
+    const gardenIdMap: Record<string, string> = {};
+    const plantIdMap: Record<string, string> = {};
+
+    // 3. Import Gardens
+    const gardensToInsert = mockGardens.map(g => {
+      const newUuid = crypto.randomUUID();
+      gardenIdMap[g.id] = newUuid;
+      return {
+        id: newUuid,
+        user_id: userId,
+        name: g.name,
+        description: g.description || "",
+        cover_image: g.cover_image || "",
+        created_at: g.created_at || new Date().toISOString()
+      };
+    });
+
+    const { error: gError } = await supabase.from("gardens").insert(gardensToInsert);
+    if (gError) throw gError;
+
+    // 4. Import Plants
+    const plantsToInsert = mockPlants.map(p => {
+      const newUuid = crypto.randomUUID();
+      plantIdMap[p.id] = newUuid;
+      return {
+        id: newUuid,
+        user_id: userId,
+        garden_id: p.garden_id ? gardenIdMap[p.garden_id] || null : null,
+        name: p.name,
+        species: p.species,
+        location: p.location || "",
+        planting_date: p.planting_date,
+        status: p.status,
+        notes: p.notes || "",
+        cover_image: p.cover_image || "",
+        archived: p.archived || false,
+        created_at: p.created_at || new Date().toISOString()
+      };
+    });
+
+    const { error: pError } = await supabase.from("plants").insert(plantsToInsert);
+    if (pError) throw pError;
+
+    // 5. Import Schedules
+    const schedulesToInsert = mockSchedules.map(s => {
+      const mappedPlantId = plantIdMap[s.plant_id];
+      if (!mappedPlantId) return null;
+      return {
+        id: crypto.randomUUID(),
+        user_id: userId,
+        plant_id: mappedPlantId,
+        type: s.type,
+        interval_days: s.interval_days,
+        start_date: s.start_date,
+        last_performed: s.last_performed || null,
+        created_at: s.created_at || new Date().toISOString()
+      };
+    }).filter((s): s is NonNullable<typeof s> => !!s);
+
+    if (schedulesToInsert.length > 0) {
+      const { error: sError } = await supabase.from("schedules").insert(schedulesToInsert);
+      if (sError) throw sError;
+    }
+
+    // 6. Import Activities
+    const activitiesToInsert = mockActivities.map(a => {
+      const mappedPlantId = plantIdMap[a.plant_id];
+      if (!mappedPlantId) return null;
+      return {
+        id: crypto.randomUUID(),
+        user_id: userId,
+        plant_id: mappedPlantId,
+        type: a.type,
+        date: a.date,
+        details: a.details || "",
+        notes: a.notes || "",
+        photo_url: null,
+        created_at: a.created_at || new Date().toISOString()
+      };
+    }).filter((a): a is NonNullable<typeof a> => !!a);
+
+    if (activitiesToInsert.length > 0) {
+      const { error: aError } = await supabase.from("activities").insert(activitiesToInsert);
+      if (aError) throw aError;
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error("Failed to seed Supabase:", err);
+    return { success: false, error: err };
+  }
+};
+
