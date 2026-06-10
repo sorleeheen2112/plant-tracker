@@ -1555,7 +1555,8 @@ export const getActivities = async (plantId: string | null = null, limit: number
         *,
         plants:plant_id(name)
       `)
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .neq("type", "watering");
       
     if (plantId) query = query.eq("plant_id", plantId);
     query = query.order("date", { ascending: false });
@@ -1573,9 +1574,9 @@ export const getActivities = async (plantId: string | null = null, limit: number
 
   // Local Storage Fallback
   const db = loadLocalDatabase(user.id);
-  let list = db.activities;
+  let list = db.activities.filter(a => a.type !== "watering");
   if (plantId) list = list.filter(a => a.plant_id === plantId);
-  
+
   // Sort descending
   list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   if (limit) list = list.slice(0, limit);
@@ -1588,13 +1589,23 @@ export const getActivities = async (plantId: string | null = null, limit: number
     };
   });
 };
-
 export const createActivity = async (activity: Omit<Activity, "id" | "user_id" | "created_at">): Promise<Activity> => {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
+  let activityDate = activity.date;
+  if (activityDate && activityDate.length === 10) {
+    const todayLocal = new Date().toLocaleDateString("sv-SE");
+    if (activityDate === todayLocal) {
+      activityDate = new Date().toISOString();
+    } else {
+      activityDate = new Date(`${activityDate}T00:00:00`).toISOString();
+    }
+  }
+
   const newActivity: Activity = {
     ...activity,
+    date: activityDate,
     id: crypto.randomUUID(),
     user_id: user.id,
     created_at: new Date().toISOString(),
@@ -1659,7 +1670,7 @@ export const getSchedules = async (plantId: string | null = null): Promise<Sched
   const dbPlants = await getPlants(null, true);
 
   if (isSupabaseConfigured && supabase) {
-    let query = supabase.from("schedules").select("*").eq("user_id", user.id);
+    let query = supabase.from("schedules").select("*").eq("user_id", user.id).neq("type", "watering");
     if (plantId) query = query.eq("plant_id", plantId);
     
     const { data, error } = await query;
@@ -1670,7 +1681,7 @@ export const getSchedules = async (plantId: string | null = null): Promise<Sched
 
   // Local Storage Fallback
   const db = loadLocalDatabase(user.id);
-  let list = db.schedules;
+  let list = db.schedules.filter(s => s.type !== "watering");
   if (plantId) list = list.filter(s => s.plant_id === plantId);
   
   return list.map(s => enrichSchedule(s, dbPlants));
@@ -2155,6 +2166,8 @@ export const deletePlantFertilizer = async (id: string): Promise<void> => {
 
 // --- Apply Fertilizer (One-Click Workflow) ---
 
+
+
 export const applyFertilizer = async (
   plantFertilizerId: string,
   amount: string,
@@ -2164,7 +2177,15 @@ export const applyFertilizer = async (
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
-  const applied_date = dateStr || new Date().toISOString();
+  let applied_date = dateStr || new Date().toISOString();
+  if (applied_date.length === 10) {
+    const todayLocal = new Date().toLocaleDateString("sv-SE");
+    if (applied_date === todayLocal) {
+      applied_date = new Date().toISOString();
+    } else {
+      applied_date = new Date(`${applied_date}T00:00:00`).toISOString();
+    }
+  }
 
   // 1. Find PlantFertilizer record
   const allPF = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, []);
@@ -2333,6 +2354,7 @@ export const importSampleDataToSupabase = async (): Promise<{ success: boolean; 
 
     // 5. Import Schedules
     const schedulesToInsert = mockSchedules.map(s => {
+      if (s.type === "watering") return null;
       const mappedPlantId = plantIdMap[s.plant_id];
       if (!mappedPlantId) return null;
       return {
@@ -2354,6 +2376,7 @@ export const importSampleDataToSupabase = async (): Promise<{ success: boolean; 
 
     // 6. Import Activities
     const activitiesToInsert = mockActivities.map(a => {
+      if (a.type === "watering") return null;
       const mappedPlantId = plantIdMap[a.plant_id];
       if (!mappedPlantId) return null;
       return {

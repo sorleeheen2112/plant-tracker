@@ -167,6 +167,7 @@ export const th: TranslationType = {
     addSchedule: "เพิ่มตารางดูแล",
     lastWatered: "รดน้ำล่าสุด",
     lastFertilized: "ใส่ปุ๋ยล่าสุด",
+    lastPruned: "ตัดแต่งกิ่งล่าสุด",
     age: "อายุของต้นไม้",
     daysOld: "{days} วัน",
     monthsOld: "{months} เดือน",

@@ -70,7 +70,15 @@ import {
   CheckCircle2,
   AlertCircle,
   AlertTriangle,
+  Droplet,
+  Flame,
+  Scissors,
+  RefreshCw,
+  Bug,
+  Eye,
+  Flower,
 } from "lucide-react";
+
 
 // Wrap the page component with Suspense to resolve searchParams
 export default function PlantsPage() {
@@ -99,12 +107,53 @@ function PlantsContent() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
-
   // Filters State
   const [selectedGardenFilter, setSelectedGardenFilter] = useState<string>("all");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case "watering": return <Droplet className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400 shrink-0" />;
+      case "fertilizing": return <Flame className="h-2.5 w-2.5 text-amber-500 dark:text-amber-400 shrink-0" />;
+      case "pruning": return <Scissors className="h-2.5 w-2.5 text-zinc-650 dark:text-zinc-400 shrink-0" />;
+      case "repotting": return <RefreshCw className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />;
+      case "pest_control": return <Bug className="h-2.5 w-2.5 text-rose-500 dark:text-rose-400 shrink-0" />;
+      case "observation": return <Eye className="h-2.5 w-2.5 text-indigo-500 dark:text-indigo-400 shrink-0" />;
+      case "flowering": return <Flower className="h-2.5 w-2.5 text-pink-500 dark:text-pink-400 shrink-0" />;
+      case "harvest": return <Sprout className="h-2.5 w-2.5 text-emerald-500 dark:text-emerald-400 shrink-0" />;
+      default: return <HistoryIcon className="h-2.5 w-2.5 text-zinc-400 shrink-0" />;
+    }
+  };
+
+  const getActivityBadgeClass = (type: string) => {
+    switch (type) {
+      case "watering": return "text-blue-700 bg-blue-50 dark:text-blue-400 dark:bg-blue-950/25";
+      case "fertilizing": return "text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/25";
+      case "pruning": return "text-zinc-700 bg-zinc-50 dark:text-zinc-400 dark:bg-zinc-950/25";
+      case "repotting": return "text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/25";
+      case "pest_control": return "text-rose-700 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/25";
+      case "observation": return "text-indigo-700 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-950/25";
+      case "flowering": return "text-pink-700 bg-pink-50 dark:text-pink-400 dark:bg-pink-950/25";
+      case "harvest": return "text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/25";
+      default: return "text-zinc-700 bg-zinc-50 dark:text-zinc-450 dark:bg-zinc-950/25";
+    }
+  };
+
+  const getActivityBorderClass = (type: string) => {
+    switch (type) {
+      case "watering": return "border-blue-500 dark:border-blue-700";
+      case "fertilizing": return "border-amber-500 dark:border-amber-700";
+      case "pruning": return "border-zinc-400 dark:border-zinc-650";
+      case "repotting": return "border-emerald-500 dark:border-emerald-700";
+      case "pest_control": return "border-rose-500 dark:border-rose-700";
+      case "observation": return "border-indigo-500 dark:border-indigo-700";
+      case "flowering": return "border-pink-500 dark:border-pink-700";
+      case "harvest": return "border-emerald-500 dark:border-emerald-700";
+      default: return "border-zinc-300 dark:border-zinc-700";
+    }
+  };
 
   // --- Modal States ---
   const [gardenModalOpen, setGardenModalOpen] = useState(false);
@@ -129,13 +178,13 @@ function PlantsContent() {
 
   // Add schedule form states (within detail tab)
   const [schedModalOpen, setSchedModalOpen] = useState(false);
-  const [schedType, setSchedType] = useState<ActivityType>("watering");
+  const [schedType, setSchedType] = useState<ActivityType>("fertilizing");
   const [schedInterval, setSchedInterval] = useState(2);
   const [schedStartDate, setSchedStartDate] = useState(new Date().toLocaleDateString("sv-SE"));
 
   // Log activity form states (within detail tab)
   const [actModalOpen, setActModalOpen] = useState(false);
-  const [actType, setActType] = useState<ActivityType>("watering");
+  const [actType, setActType] = useState<ActivityType>("fertilizing");
   const [actDetails, setActDetails] = useState("");
   const [actNotes, setActNotes] = useState("");
   const [actPhoto, setActPhoto] = useState("");
@@ -477,7 +526,7 @@ function PlantsContent() {
       return t("plantDetail.yearsOld", { years });
     };
 
-    const lastWateredAct = activities.find(a => a.type === "watering");
+    const lastPrunedAct = activities.find(a => a.type === "pruning");
     const lastFertilizedAct = activities.find(a => a.type === "fertilizing");
 
     return (
@@ -618,16 +667,16 @@ function PlantsContent() {
                   {/* Last performed timestamps */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 flex items-center gap-4 shadow-xs">
-                      <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600">
+                      <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-lg bg-zinc-50 dark:bg-zinc-950/20 text-zinc-600">
                         <Clock className="h-5 w-5" />
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
-                          {t("plantDetail.lastWatered")}
+                          {t("plantDetail.lastPruned")}
                         </span>
                         <p className="text-sm font-black text-zinc-800 dark:text-zinc-200 mt-0.5">
-                          {lastWateredAct
-                            ? new Date(lastWateredAct.date).toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
+                          {lastPrunedAct
+                            ? new Date(lastPrunedAct.date).toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
                                 month: "short",
                                 day: "numeric",
                                 hour: "2-digit",
@@ -669,7 +718,7 @@ function PlantsContent() {
                     {t("plantDetail.quickLog")}
                   </h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {(["watering", "fertilizing", "pruning", "observation"] as const).map(type => (
+                    {(["fertilizing", "pruning", "repotting", "observation"] as const).map(type => (
                       <button
                         key={type}
                         onClick={() => {
@@ -696,7 +745,7 @@ function PlantsContent() {
                   </h3>
                   <button
                     onClick={() => {
-                      setActType("watering");
+                      setActType("fertilizing");
                       setActDetails("");
                       setActModalOpen(true);
                     }}
@@ -711,10 +760,10 @@ function PlantsContent() {
                     <EmptyState
                       icon={HistoryIcon}
                       title={t("plantDetail.noActivity")}
-                      description="Log custom waterings, prunings, and repottings to create a growth journal."
+                      description="Log custom fertilizations, prunings, and repottings to create a growth journal."
                       actionLabel={t("activities.addActivity")}
                       onAction={() => {
-                        setActType("watering");
+                        setActType("fertilizing");
                         setActDetails("");
                         setActModalOpen(true);
                       }}
@@ -723,11 +772,13 @@ function PlantsContent() {
                     <div className="relative border-l-2 border-zinc-100 dark:border-zinc-850 pl-5 ml-2.5 space-y-6">
                       {activities.map((act) => (
                         <div key={act.id} className="relative">
-                          <span className="absolute -left-[27px] top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-white dark:ring-zinc-900" />
+                          <span className={`absolute -left-[30px] top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border-2 shadow-xs ${getActivityBorderClass(act.type)}`}>
+                            {getActivityIcon(act.type)}
+                          </span>
                           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 bg-zinc-50/10 dark:bg-zinc-950/5 border border-zinc-100 dark:border-zinc-850/50 p-4 rounded-xl hover:border-zinc-200 dark:hover:border-zinc-800 transition-colors">
                             <div className="space-y-1.5">
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/25 px-2 py-0.5 rounded uppercase font-semibold">
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase font-semibold ${getActivityBadgeClass(act.type)}`}>
                                   {t(`activities.${act.type}`)}
                                 </span>
                                 <span className="text-[10px] font-extrabold text-zinc-400 font-mono">
@@ -833,8 +884,8 @@ function PlantsContent() {
                   </h3>
                   <button
                     onClick={() => {
-                      setSchedType("watering");
-                      setSchedInterval(2);
+                      setSchedType("fertilizing");
+                      setSchedInterval(14);
                       setSchedModalOpen(true);
                     }}
                     className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm cursor-pointer"
@@ -848,11 +899,11 @@ function PlantsContent() {
                     <EmptyState
                       icon={Calendar}
                       title={t("plantDetail.noSchedule")}
-                      description="Create customized recurring timers to water, fertilize, or repot your plants on set day frequencies."
+                      description="Create customized recurring timers to fertilize, prune, or repot your plants on set day frequencies."
                       actionLabel={t("plantDetail.addSchedule")}
                       onAction={() => {
-                        setSchedType("watering");
-                        setSchedInterval(2);
+                        setSchedType("fertilizing");
+                        setSchedInterval(14);
                         setSchedModalOpen(true);
                       }}
                     />
@@ -1101,16 +1152,16 @@ function PlantsContent() {
                   </div>
 
                   <div className="border border-zinc-100 dark:border-zinc-850 rounded-xl p-5 bg-zinc-50/20 dark:bg-zinc-950/10 text-center">
-                    <span className="text-3xl font-black text-blue-600 font-mono">
-                      {activities.filter(a => a.type === "watering").length}
+                    <span className="text-3xl font-black text-amber-500 font-mono">
+                      {activities.filter(a => a.type === "fertilizing").length}
                     </span>
                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block mt-1">
-                      Waterings completed
+                      Fertilizations completed
                     </span>
                   </div>
 
                   <div className="border border-zinc-100 dark:border-zinc-850 rounded-xl p-5 bg-zinc-50/20 dark:bg-zinc-950/10 text-center">
-                    <span className="text-3xl font-black text-amber-600 font-mono">
+                    <span className="text-3xl font-black text-indigo-500 font-mono">
                       {schedules.length}
                     </span>
                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block mt-1">
@@ -1137,7 +1188,6 @@ function PlantsContent() {
                   onChange={(e) => setSchedType(e.target.value as any)}
                   className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-bold"
                 >
-                  <option value="watering">{t("activities.watered")}</option>
                   <option value="fertilizing">{t("activities.fertilized")}</option>
                   <option value="pruning">{t("activities.pruned")}</option>
                   <option value="repotting">{t("activities.repotted")}</option>
@@ -1199,7 +1249,6 @@ function PlantsContent() {
                   onChange={(e) => setActType(e.target.value as any)}
                   className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-bold"
                 >
-                  <option value="watering">{t("activities.watered")}</option>
                   <option value="fertilizing">{t("activities.fertilized")}</option>
                   <option value="pruning">{t("activities.pruned")}</option>
                   <option value="repotting">{t("activities.repotted")}</option>

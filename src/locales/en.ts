@@ -165,6 +165,7 @@ export const en = {
     addSchedule: "Add Schedule",
     lastWatered: "Last Watered",
     lastFertilized: "Last Fertilized",
+    lastPruned: "Last Pruned",
     age: "Age",
     daysOld: "{days} days",
     monthsOld: "{months} months",
