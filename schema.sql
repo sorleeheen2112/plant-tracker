@@ -40,9 +40,9 @@ begin
     new.email,
     coalesce(
       new.raw_user_meta_data->>'avatar_url', 
-      'https://api.dicebear.com/7.x/adventurer/svg?seed=' || encode(hmac(new.id::text::bytea, 'seed'::bytea, 'sha256'::text), 'hex')
+      'https://api.dicebear.com/7.x/adventurer/svg?seed=' || new.id::text
     ),
-    'en',
+    'th',
     'system'
   );
   return new;
