@@ -2204,19 +2204,13 @@ export const applyFertilizer = async (
   const fertInfo = fertilizers.find(f => f.id === pf.fertilizer_id);
   const fertLabel = fertInfo ? `${fertInfo.name} (${fertInfo.npk_formula})` : "Fertilizer";
 
-  const activityRecord: Activity = {
-    id: crypto.randomUUID(),
-    user_id: user.id,
+  await createActivity({
     plant_id: pf.plant_id,
     type: "fertilizing",
     date: applied_date,
     details: `ใส่ปุ๋ย: ${fertLabel}${amount ? ` — ${amount}` : ""}`,
     notes: note,
-    created_at: new Date().toISOString(),
-  };
-  const allActivities = getLocalStorageData<Activity>(ACTIVITIES_KEY, []);
-  allActivities.push(activityRecord);
-  saveLocalStorageData(ACTIVITIES_KEY, allActivities);
+  });
 
   // 5. Return enriched result
   const plants = getLocalStorageData<Plant>(PLANTS_KEY, []);
