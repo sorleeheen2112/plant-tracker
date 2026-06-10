@@ -131,7 +131,7 @@ function PlantsContent() {
   const [schedModalOpen, setSchedModalOpen] = useState(false);
   const [schedType, setSchedType] = useState<ActivityType>("watering");
   const [schedInterval, setSchedInterval] = useState(2);
-  const [schedStartDate, setSchedStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [schedStartDate, setSchedStartDate] = useState(new Date().toLocaleDateString("sv-SE"));
 
   // Log activity form states (within detail tab)
   const [actModalOpen, setActModalOpen] = useState(false);
@@ -151,7 +151,7 @@ function PlantsContent() {
   const [applyingPF, setApplyingPF] = useState<PlantFertilizer | null>(null);
   const [applyAmount, setApplyAmount] = useState("");
   const [applyNote, setApplyNote] = useState("");
-  const [applyDate, setApplyDate] = useState(new Date().toISOString().slice(0, 10));
+  const [applyDate, setApplyDate] = useState(new Date().toLocaleDateString("sv-SE"));
 
   // --- Loader Helper ---
   const loadData = async () => {
@@ -252,7 +252,7 @@ function PlantsContent() {
     setPlantSpecies("");
     setPlantGardenId(selectedGardenFilter !== "all" ? selectedGardenFilter : gardens[0]?.id || "");
     setPlantLoc("");
-    setPlantDate(new Date().toISOString().slice(0, 10));
+    setPlantDate(new Date().toLocaleDateString("sv-SE"));
     setPlantStatus("healthy");
     setPlantNotes("");
     setPlantCover("");
@@ -1017,7 +1017,7 @@ function PlantsContent() {
                                 setApplyingPF(pf);
                                 setApplyAmount("");
                                 setApplyNote("");
-                                setApplyDate(new Date().toISOString().slice(0, 10));
+                                setApplyDate(new Date().toLocaleDateString("sv-SE"));
                                 setApplyModalOpen(true);
                               }}
                               className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
