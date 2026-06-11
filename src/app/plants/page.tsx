@@ -315,7 +315,16 @@ function PlantsContent() {
     setPlantSpecies(p.species);
     setPlantGardenId(p.garden_id || "");
     setPlantLoc(p.location || "");
-    setPlantDate(p.planting_date);
+    
+    // Format planting_date safely to YYYY-MM-DD for input type="date"
+    let formattedDate = "";
+    if (p.planting_date) {
+      formattedDate = p.planting_date.split(/[T ]/)[0];
+    } else {
+      formattedDate = new Date().toLocaleDateString("sv-SE");
+    }
+    setPlantDate(formattedDate);
+    
     setPlantStatus(p.status);
     setPlantNotes(p.notes || "");
     setPlantCover(p.cover_image || "");
