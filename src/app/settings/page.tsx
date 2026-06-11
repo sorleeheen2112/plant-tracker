@@ -6,9 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "@/context/LanguageContext";
 import { useToast } from "@/context/ToastContext";
 import { useTheme } from "@/context/ThemeContext";
-import { Settings, User, Globe, Moon, Save, Languages, AlertTriangle, RefreshCw } from "lucide-react";
-import { importSampleDataToSupabase } from "@/services/db";
-import { isSupabaseConfigured } from "@/services/supabase";
+import { Settings, User, Globe, Moon, Save, Languages } from "lucide-react";
 
 export default function SettingsPage() {
   const { user, updateUserProfile } = useAuth();
@@ -22,7 +20,6 @@ export default function SettingsPage() {
   const [langPreference, setLangPreference] = useState<"en" | "th">("en");
   const [themePreference, setThemePreference] = useState<"light" | "dark" | "system">("system");
   const [saving, setSaving] = useState(false);
-  const [importing, setImporting] = useState(false);
 
   // Sync state values on user mount
   useEffect(() => {
@@ -60,46 +57,6 @@ export default function SettingsPage() {
       toast(t("settings.updateError"), "error");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleResetData = () => {
-    if (confirm(t("settings.resetDataConfirm"))) {
-      localStorage.removeItem("plant_tracker_gardens");
-      localStorage.removeItem("plant_tracker_plants");
-      localStorage.removeItem("plant_tracker_activities");
-      localStorage.removeItem("plant_tracker_schedules");
-      localStorage.removeItem("plant_tracker_notifications");
-      toast(t("settings.resetSuccess"), "success");
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
-    }
-  };
-
-  const handleImportData = async () => {
-    if (!isSupabaseConfigured) {
-      toast("Supabase is not configured.", "error");
-      return;
-    }
-
-    if (confirm(t("settings.importConfirm"))) {
-      setImporting(true);
-      try {
-        const { success, error } = await importSampleDataToSupabase();
-        if (success) {
-          toast(t("settings.importSuccess"), "success");
-          setTimeout(() => {
-            window.location.reload();
-          }, 1500);
-        } else {
-          toast(error ? `Error: ${error.message}` : t("settings.importError"), "error");
-        }
-      } catch (err: any) {
-        toast(t("settings.importError"), "error");
-      } finally {
-        setImporting(false);
-      }
     }
   };
 
@@ -210,62 +167,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Database Seed Section */}
-          {isSupabaseConfigured && (
-            <div className="bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-200 dark:border-emerald-900/50 rounded-2xl p-6 shadow-xs space-y-4">
-              <h2 className="text-sm font-extrabold text-emerald-850 dark:text-emerald-450 flex items-center gap-2 border-b border-emerald-100 dark:border-emerald-900/30 pb-2.5">
-                <RefreshCw className={`h-4.5 w-4.5 ${importing ? "animate-spin" : ""}`} />
-                {t("settings.importSection")}
-              </h2>
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1 max-w-md">
-                  <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                    {t("settings.importDataBtn")}
-                  </h3>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    {t("settings.importDataSubtitle")}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleImportData}
-                  disabled={importing}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-500/50 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer border border-emerald-200 dark:border-emerald-900/50 shadow-xs shrink-0 self-start sm:self-auto"
-                >
-                  <RefreshCw className={`h-4 w-4 ${importing ? "animate-spin" : ""}`} />
-                  {importing ? t("common.loading") : t("settings.importDataBtn")}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Danger Zone */}
-          <div className="bg-red-50/50 dark:bg-red-950/10 border border-red-200 dark:border-red-900/50 rounded-2xl p-6 shadow-xs space-y-4">
-            <h2 className="text-sm font-extrabold text-red-700 dark:text-red-400 flex items-center gap-2 border-b border-red-100 dark:border-red-900/30 pb-2.5">
-              <AlertTriangle className="h-4.5 w-4.5" />
-              {t("settings.dangerZone")}
-            </h2>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1 max-w-md">
-                <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                  {t("settings.resetDataBtn")}
-                </h3>
-                <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                  {t("settings.resetDataSubtitle")}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleResetData}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-500 dark:bg-red-700 dark:hover:bg-red-600 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer border border-red-200 dark:border-red-900/50 shadow-xs shrink-0 self-start sm:self-auto"
-              >
-                <RefreshCw className="h-4 w-4" />
-                {t("settings.resetDataBtn")}
-              </button>
-            </div>
-          </div>
 
           {/* Submit Action */}
           <div className="flex justify-end">
