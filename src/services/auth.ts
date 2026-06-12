@@ -163,7 +163,7 @@ export const signUp = async (email: string, password?: string, name?: string): P
     };
 
     // Save profile record
-    await supabase.from("profiles").insert(profile);
+    await supabase.from("profiles").upsert(profile, { onConflict: "id" });
     notifyAuthStateChange(profile);
     return { user: profile, error: null };
   }

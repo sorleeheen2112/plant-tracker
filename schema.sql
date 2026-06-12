@@ -30,14 +30,15 @@ create policy "Allow profile insert for profile owners" on public.profiles
   for insert with check (auth.uid() = id);
 
 -- Trigger to automatically create a public profile record when a user registers on Supabase Auth
+drop trigger if exists on_auth_user_created on auth.users;
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id, name, email, avatar_url, language, theme)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1), 'Gardener'),
+    coalesce(new.email, ''),
     coalesce(
       new.raw_user_meta_data->>'avatar_url', 
       'https://api.dicebear.com/7.x/adventurer/svg?seed=' || new.id::text
@@ -47,9 +48,9 @@ begin
   );
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public;
 
-create or replace trigger on_auth_user_created
+create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
