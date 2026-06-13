@@ -30,6 +30,7 @@ import {
   deletePlantFertilizer,
   applyFertilizer,
   getFertilizerHistory,
+  waterAllPlants,
   Garden,
   Plant,
   Schedule,
@@ -205,6 +206,22 @@ function PlantsContent() {
   const [applyAmount, setApplyAmount] = useState("");
   const [applyNote, setApplyNote] = useState("");
   const [applyDate, setApplyDate] = useState(new Date().toLocaleDateString("sv-SE"));
+  const [isWaterAllModalOpen, setIsWaterAllModalOpen] = useState(false);
+
+  const handleWaterAllConfirm = async () => {
+    try {
+      const result = await waterAllPlants();
+      if (result.success) {
+        toast(t("dashboard.waterAllSuccess"), "success");
+        await loadData();
+      }
+    } catch (e) {
+      console.error(e);
+      toast(t("common.error"), "error");
+    } finally {
+      setIsWaterAllModalOpen(false);
+    }
+  };
 
   // --- Loader Helper ---
   const loadData = async () => {
@@ -678,7 +695,29 @@ function PlantsContent() {
                   </div>
 
                   {/* Last performed timestamps */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 flex items-center gap-4 shadow-xs">
+                      <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/20 text-blue-600">
+                        <Droplet className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                          {t("plantDetail.lastWatered")}
+                        </span>
+                        <p className="text-sm font-black text-zinc-800 dark:text-zinc-200 mt-0.5">
+                          {activePlant.last_watered_at
+                            ? new Date(activePlant.last_watered_at).toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })
+                            : t("common.none")
+                          }
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 flex items-center gap-4 shadow-xs">
                       <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-lg bg-zinc-50 dark:bg-zinc-950/20 text-zinc-600">
                         <Clock className="h-5 w-5" />
@@ -1740,6 +1779,15 @@ function PlantsContent() {
           
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => setIsWaterAllModalOpen(true)}
+              disabled={plants.filter(p => !p.archived).length === 0}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-300 disabled:dark:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+              title={plants.filter(p => !p.archived).length === 0 ? t("dashboard.noPlantsToWater") : t("dashboard.waterAll")}
+            >
+              <Droplet className="h-4 w-4 shrink-0" />
+              {plants.filter(p => !p.archived).length === 0 ? t("dashboard.noPlantsToWater") : t("dashboard.waterAll")}
+            </button>
+            <button
               onClick={openAddGarden}
               className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-850 text-zinc-750 dark:text-zinc-300 text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
             >
@@ -2170,6 +2218,40 @@ function PlantsContent() {
             )}
           </div>
         </Modal>
+
+        {isWaterAllModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm animate-fade-in">
+            <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                  <Droplet className="h-5 w-5 animate-bounce" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-zinc-950 dark:text-zinc-50 tracking-tight">
+                    {t("dashboard.waterAllConfirmTitle")}
+                  </h3>
+                  <p className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 mt-1">
+                    {t("dashboard.waterAllConfirmText")}
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setIsWaterAllModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg shadow-sm transition-colors duration-150 cursor-pointer"
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  onClick={handleWaterAllConfirm}
+                  className="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 rounded-lg shadow-sm transition-colors duration-150 cursor-pointer"
+                >
+                  {t("common.save")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );

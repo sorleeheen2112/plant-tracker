@@ -88,6 +88,7 @@ create table public.plants (
   notes text,
   cover_image text,
   archived boolean default false not null,
+  last_watered_at timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -161,4 +162,21 @@ alter table public.notifications enable row level security;
 
 -- Policies for Notifications
 create policy "Allow all notification actions for owners" on public.notifications
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+
+-- 7. BULK WATERING HISTORY TABLE
+create table public.bulk_watering_history (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  watered_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  affected_plants_count integer not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS for Bulk Watering History
+alter table public.bulk_watering_history enable row level security;
+
+-- Policies for Bulk Watering History
+create policy "Allow all bulk watering history for owners" on public.bulk_watering_history
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

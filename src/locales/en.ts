@@ -87,6 +87,11 @@ export const en = {
     welcome: "Welcome back to your garden dashboard",
     loadError: "Error loading dashboard data",
     completeTaskError: "Error completing task",
+    waterAll: "Water All",
+    waterAllConfirmTitle: "Confirm Water All",
+    waterAllConfirmText: "Are you sure you want to record that all plants have been watered?",
+    waterAllSuccess: "Successfully watered all plants",
+    noPlantsToWater: "No plants in system",
   },
   gardens: {
     title: "Gardens",
@@ -210,6 +215,8 @@ export const en = {
     allTypes: "All Care Types",
     loadingActivities: "Loading Activities...",
     noActivitiesDescription: "No matching care activities found. Log a care action to start tracking!",
+    bulk_watering: "Water All",
+    bulkWateringDetail: "Watered all {count} plants",
   },
   schedules: {
     title: "Recurring Schedules",

@@ -89,6 +89,11 @@ export const th: TranslationType = {
     welcome: "ยินดีต้อนรับกลับเข้าสู่แผงควบคุมดูแลสวนของคุณ",
     loadError: "เกิดข้อผิดพลาดในการโหลดข้อมูลแผงควบคุม",
     completeTaskError: "เกิดข้อผิดพลาดในการบันทึกงานเสร็จสิ้น",
+    waterAll: "รดน้ำทั้งหมด",
+    waterAllConfirmTitle: "ยืนยันการรดน้ำทั้งหมด",
+    waterAllConfirmText: "คุณต้องการบันทึกว่ารดน้ำต้นไม้ทั้งหมดแล้วใช่หรือไม่?",
+    waterAllSuccess: "รดน้ำต้นไม้ทั้งหมดเรียบร้อยแล้ว",
+    noPlantsToWater: "ยังไม่มีต้นไม้ในระบบ",
   },
   gardens: {
     title: "สวนทั้งหมด",
@@ -212,6 +217,8 @@ export const th: TranslationType = {
     allTypes: "ประเภทดูแลทั้งหมด",
     loadingActivities: "กำลังโหลดกิจกรรม...",
     noActivitiesDescription: "ไม่พบกิจกรรมดูแลที่ตรงกัน ลองบันทึกกิจกรรมการดูแลเพื่อเริ่มติดตามข้อมูล!",
+    bulk_watering: "รดน้ำทั้งหมด",
+    bulkWateringDetail: "รดน้ำต้นไม้ทั้งหมดจำนวน {count} ต้น",
   },
   schedules: {
     title: "ตารางเวลาการดูแลประจำ",

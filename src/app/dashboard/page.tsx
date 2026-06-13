@@ -17,6 +17,7 @@ import {
   getSchedules,
   getActivities,
   performSchedule,
+  waterAllPlants,
   Garden,
   Plant,
   Schedule,
@@ -32,7 +33,8 @@ import {
   ChevronRight,
   TrendingUp,
   Activity as ActivityIcon,
-  Play
+  Play,
+  Droplet
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -45,6 +47,7 @@ export default function DashboardPage() {
   const [plants, setPlants] = useState<Plant[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [isWaterAllModalOpen, setIsWaterAllModalOpen] = useState(false);
 
   const loadDashboardData = async () => {
     try {
@@ -78,6 +81,21 @@ export default function DashboardPage() {
       await loadDashboardData();
     } catch (e) {
       toast(t("dashboard.completeTaskError"), "error");
+    }
+  };
+
+  const handleWaterAllConfirm = async () => {
+    try {
+      const result = await waterAllPlants();
+      if (result.success) {
+        toast(t("dashboard.waterAllSuccess"), "success");
+        await loadDashboardData();
+      }
+    } catch (e) {
+      console.error(e);
+      toast(t("common.error"), "error");
+    } finally {
+      setIsWaterAllModalOpen(false);
     }
   };
 
@@ -194,6 +212,17 @@ export default function DashboardPage() {
             <p className="text-sm font-semibold text-zinc-400 dark:text-zinc-500">
               {t("dashboard.welcome")}
             </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsWaterAllModalOpen(true)}
+              disabled={plants.length === 0}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-zinc-300 disabled:dark:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed rounded-lg shadow-sm transition-all duration-150 cursor-pointer"
+              title={plants.length === 0 ? t("dashboard.noPlantsToWater") : t("dashboard.waterAll")}
+            >
+              <Droplet className="h-4 w-4" />
+              <span>{plants.length === 0 ? t("dashboard.noPlantsToWater") : t("dashboard.waterAll")}</span>
+            </button>
           </div>
         </div>
 
@@ -460,6 +489,40 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {isWaterAllModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                <Droplet className="h-5 w-5 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-zinc-950 dark:text-zinc-50 tracking-tight">
+                  {t("dashboard.waterAllConfirmTitle")}
+                </h3>
+                <p className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 mt-1">
+                  {t("dashboard.waterAllConfirmText")}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsWaterAllModalOpen(false)}
+                className="px-4 py-2.5 text-xs font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg shadow-sm transition-colors duration-150 cursor-pointer"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={handleWaterAllConfirm}
+                className="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 rounded-lg shadow-sm transition-colors duration-150 cursor-pointer"
+              >
+                {t("common.save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

@@ -23,6 +23,7 @@ export interface Plant {
   notes: string;
   cover_image: string;
   archived: boolean;
+  last_watered_at?: string | null;
   created_at: string;
 }
 
@@ -34,7 +35,8 @@ export type ActivityType =
   | "pest_control"
   | "observation"
   | "flowering"
-  | "harvest";
+  | "harvest"
+  | "bulk_watering";
 
 export interface Activity {
   id: string;
@@ -77,6 +79,14 @@ export interface Notification {
   message_th: string;
   type: "due" | "upcoming" | "overdue";
   read: boolean;
+  created_at: string;
+}
+
+export interface BulkWateringHistory {
+  id: string;
+  user_id: string;
+  watered_at: string;
+  affected_plants_count: number;
   created_at: string;
 }
 
@@ -1566,10 +1576,39 @@ export const getActivities = async (plantId: string | null = null, limit: number
     const { data, error } = await query;
     if (error) throw error;
     
-    return (data || []).map((a: any) => ({
+    const mapped = (data || []).map((a: any) => ({
       ...a,
       plant_name: a.plants?.name || "Unknown Plant"
     }));
+
+    let bulkActivities: Activity[] = [];
+    if (!plantId) {
+      let bulkQuery = supabase
+        .from("bulk_watering_history")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("watered_at", { ascending: false });
+      if (limit) bulkQuery = bulkQuery.limit(limit);
+      const { data: bulkData, error: bulkError } = await bulkQuery;
+      if (!bulkError && bulkData) {
+        bulkActivities = bulkData.map((b: any) => ({
+          id: b.id,
+          user_id: b.user_id,
+          plant_id: "bulk",
+          type: "bulk_watering" as ActivityType,
+          date: b.watered_at,
+          details: String(b.affected_plants_count),
+          notes: "",
+          created_at: b.created_at,
+          plant_name: "ทุกต้น"
+        }));
+      }
+    }
+
+    const combined = [...mapped, ...bulkActivities];
+    combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    if (limit) return combined.slice(0, limit);
+    return combined;
   }
 
   // Local Storage Fallback
@@ -1577,17 +1616,34 @@ export const getActivities = async (plantId: string | null = null, limit: number
   let list = db.activities.filter(a => a.type !== "watering");
   if (plantId) list = list.filter(a => a.plant_id === plantId);
 
-  // Sort descending
-  list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  if (limit) list = list.slice(0, limit);
-
-  return list.map(a => {
+  const mapped = list.map(a => {
     const plant = db.plants.find(p => p.id === a.plant_id);
     return {
       ...a,
       plant_name: plant ? plant.name : "Unknown Plant"
     };
   });
+
+  let bulkActivities: Activity[] = [];
+  if (!plantId) {
+    const storedBulk = getLocalStorageData<any>("plant_tracker_bulk_watering_history", []).filter(b => b.user_id === user.id);
+    bulkActivities = storedBulk.map((b: any) => ({
+      id: b.id,
+      user_id: b.user_id,
+      plant_id: "bulk",
+      type: "bulk_watering" as ActivityType,
+      date: b.watered_at,
+      details: String(b.affected_plants_count),
+      notes: "",
+      created_at: b.created_at,
+      plant_name: "ทุกต้น"
+    }));
+  }
+
+  const combined = [...mapped, ...bulkActivities];
+  combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  if (limit) return combined.slice(0, limit);
+  return combined;
 };
 export const createActivity = async (activity: Omit<Activity, "id" | "user_id" | "created_at">): Promise<Activity> => {
   const user = await getCurrentUser();
@@ -1828,6 +1884,43 @@ export const getNotifications = async (): Promise<Notification[]> => {
     }
   });
 
+  // Dynamically check watering schedules to see if any are due or overdue
+  const wateringSchedules = await getWateringSchedules();
+  let hasDueWatering = false;
+  let hasOverdueWatering = false;
+  let earliestDueDate: string | null = null;
+  
+  wateringSchedules.forEach(s => {
+    const plant = allPlants.find(p => p.id === s.plant_id);
+    if (!plant || plant.archived) return;
+
+    if (s.task_status === "overdue") {
+      hasOverdueWatering = true;
+    } else if (s.task_status === "due") {
+      hasDueWatering = true;
+    }
+    
+    if (s.task_status === "due" || s.task_status === "overdue") {
+      if (!earliestDueDate || (s.next_due_date && s.next_due_date < earliestDueDate)) {
+        earliestDueDate = s.next_due_date || null;
+      }
+    }
+  });
+
+  if (hasOverdueWatering || hasDueWatering) {
+    notifications.push({
+      id: "auto-bulk-watering",
+      user_id: user.id,
+      title_en: "Time to water your plants!",
+      title_th: "ถึงเวลารดน้ำต้นไม้แล้ว",
+      message_en: "Some of your plants need watering.",
+      message_th: "มีต้นไม้ที่ถึงกำหนดรดน้ำแล้ว",
+      type: hasOverdueWatering ? "overdue" : "due",
+      read: false,
+      created_at: earliestDueDate || new Date().toISOString(),
+    });
+  }
+
   if (isSupabaseConfigured && supabase) {
     // Merge database-saved notifications
     const { data, error } = await supabase
@@ -1847,6 +1940,119 @@ export const getNotifications = async (): Promise<Notification[]> => {
   
   // We combine auto-generated task reminders (always unread until marked done) + stored custom alerts
   return [...notifications, ...stored].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+};
+
+export const getWateringSchedules = async (plantId: string | null = null): Promise<Schedule[]> => {
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  const dbPlants = await getPlants(null, true);
+
+  if (isSupabaseConfigured && supabase) {
+    let query = supabase.from("schedules").select("*").eq("user_id", user.id).eq("type", "watering");
+    if (plantId) query = query.eq("plant_id", plantId);
+    
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return (data || []).map(s => enrichSchedule(s, dbPlants));
+  }
+
+  // Local Storage Fallback
+  const db = loadLocalDatabase(user.id);
+  let list = db.schedules.filter(s => s.type === "watering");
+  if (plantId) list = list.filter(s => s.plant_id === plantId);
+  
+  return list.map(s => enrichSchedule(s, dbPlants));
+};
+
+export const waterAllPlants = async (): Promise<{ success: boolean; affectedCount: number }> => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Not authenticated");
+  const userId = user.id;
+  const nowStr = new Date().toISOString();
+
+  if (isSupabaseConfigured && supabase) {
+    const { data: activePlants, error: plantsError } = await supabase
+      .from("plants")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("archived", false);
+    if (plantsError) throw plantsError;
+    if (!activePlants || activePlants.length === 0) {
+      return { success: true, affectedCount: 0 };
+    }
+    const activePlantIds = activePlants.map(p => p.id);
+
+    // Update last_watered_at for active plants
+    const { error: updatePlantsError } = await supabase
+      .from("plants")
+      .update({ last_watered_at: nowStr })
+      .in("id", activePlantIds);
+    if (updatePlantsError) throw updatePlantsError;
+
+    // Update watering schedules for these plants
+    const { error: updateSchedulesError } = await supabase
+      .from("schedules")
+      .update({ last_performed: nowStr })
+      .eq("type", "watering")
+      .in("plant_id", activePlantIds);
+    if (updateSchedulesError) throw updateSchedulesError;
+
+    // Insert into bulk_watering_history
+    const { error: historyError } = await supabase
+      .from("bulk_watering_history")
+      .insert({
+        user_id: userId,
+        watered_at: nowStr,
+        affected_plants_count: activePlantIds.length,
+      });
+    if (historyError) throw historyError;
+
+    return { success: true, affectedCount: activePlantIds.length };
+  }
+
+  // Local Storage Fallback
+  const db = loadLocalDatabase(userId);
+  const activePlants = db.plants.filter(p => !p.archived);
+  if (activePlants.length === 0) {
+    return { success: true, affectedCount: 0 };
+  }
+  const activePlantIds = activePlants.map(p => p.id);
+
+  // Update plants in localStorage
+  const allPlants = getLocalStorageData<Plant>(PLANTS_KEY, DEFAULT_PLANTS(userId));
+  const updatedPlants = allPlants.map(p => {
+    if (activePlantIds.includes(p.id)) {
+      return { ...p, last_watered_at: nowStr };
+    }
+    return p;
+  });
+  saveLocalStorageData(PLANTS_KEY, updatedPlants);
+
+  // Update schedules in localStorage
+  const allSchedules = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(userId));
+  const updatedSchedules = allSchedules.map(s => {
+    if (s.type === "watering" && activePlantIds.includes(s.plant_id)) {
+      return { ...s, last_performed: nowStr };
+    }
+    return s;
+  });
+  saveLocalStorageData(SCHEDULES_KEY, updatedSchedules);
+
+  // Create bulk watering history in localStorage
+  const bulkHistory = getLocalStorageData<any>("plant_tracker_bulk_watering_history", []);
+  const newBulkHistoryItem = {
+    id: crypto.randomUUID(),
+    user_id: userId,
+    watered_at: nowStr,
+    affected_plants_count: activePlantIds.length,
+    created_at: nowStr,
+  };
+  bulkHistory.push(newBulkHistoryItem);
+  saveLocalStorageData("plant_tracker_bulk_watering_history", bulkHistory);
+
+  return { success: true, affectedCount: activePlantIds.length };
 };
 
 export const markNotificationRead = async (id: string): Promise<void> => {

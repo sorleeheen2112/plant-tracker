@@ -106,8 +106,9 @@ export default function ActivitiesPage() {
   const getActivityIcon = (type: string) => {
     switch (type) {
       case "watering": return <Droplet className="h-4 w-4 text-blue-600 shrink-0" />;
+      case "bulk_watering": return <Droplet className="h-4 w-4 text-blue-600 shrink-0" />;
       case "fertilizing": return <Flame className="h-4 w-4 text-amber-500 shrink-0" />;
-      case "pruning": return <Scissors className="h-4 w-4 text-zinc-650 shrink-0" />;
+      case "pruning": return <Scissors className="h-4 w-4 text-zinc-655 shrink-0" />;
       case "repotting": return <RefreshCw className="h-4 w-4 text-emerald-600 shrink-0" />;
       case "pest_control": return <Bug className="h-4 w-4 text-rose-500 shrink-0" />;
       case "observation": return <Eye className="h-4 w-4 text-indigo-500 shrink-0" />;
@@ -176,6 +177,7 @@ export default function ActivitiesPage() {
               className="w-full p-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs font-bold"
             >
               <option value="all">{t("activities.allTypes")}</option>
+              <option value="bulk_watering">{t("activities.bulk_watering")}</option>
               <option value="fertilizing">{t("activities.fertilized")}</option>
               <option value="pruning">{t("activities.pruned")}</option>
               <option value="repotting">{t("activities.repotted")}</option>
@@ -206,16 +208,24 @@ export default function ActivitiesPage() {
               {filteredActivities.map((act) => (
                 <div key={act.id} className="relative">
                   {/* Styled bullet bullet type */}
-                  <span className="absolute -left-[32px] top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border-2 border-emerald-500 shadow-xs">
+                  <span className={`absolute -left-[32px] top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border-2 shadow-xs ${
+                    act.type === "bulk_watering" ? "border-blue-500" : "border-emerald-500"
+                  }`}>
                     {getActivityIcon(act.type)}
                   </span>
                   
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-black text-zinc-800 dark:text-zinc-100">
-                        {act.plant_name}
+                        {act.type === "bulk_watering"
+                          ? (language === "th" ? "ทุกต้น" : "All Plants")
+                          : act.plant_name}
                       </span>
-                      <span className="text-[10px] font-extrabold text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded uppercase font-semibold">
+                      <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase font-semibold ${
+                        act.type === "bulk_watering"
+                          ? "text-blue-700 bg-blue-50 dark:text-blue-400 dark:bg-blue-950/20"
+                          : "text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/20"
+                      }`}>
                         {t(`activities.${act.type}`)}
                       </span>
                       <span className="text-[10px] font-bold text-zinc-400 font-mono ml-auto">
@@ -231,7 +241,9 @@ export default function ActivitiesPage() {
                     </div>
 
                     <p className="text-sm font-semibold text-zinc-655 dark:text-zinc-300 leading-relaxed">
-                      {act.details}
+                      {act.type === "bulk_watering"
+                        ? t("activities.bulkWateringDetail", { count: act.details })
+                        : act.details}
                     </p>
 
                     {act.notes && (
