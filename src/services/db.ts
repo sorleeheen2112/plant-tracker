@@ -154,6 +154,19 @@ const FERTILIZERS_KEY = "plant_tracker_fertilizers";
 const PLANT_FERTILIZERS_KEY = "plant_tracker_plant_fertilizers";
 const FERTILIZER_HISTORY_KEY = "plant_tracker_fertilizer_history";
 
+// --- In-memory Plants Cache ---
+// Keyed by "gardenId:includeArchived". Shared promise prevents duplicate parallel fetches.
+const _plantsCache = new Map<string, Plant[]>();
+const _plantsResolving = new Map<string, Promise<Plant[]>>();
+
+const plantsCacheKey = (gardenId: string | null, includeArchived: boolean) =>
+  `${gardenId ?? ""}:${includeArchived}`;
+
+export const invalidatePlantsCache = () => {
+  _plantsCache.clear();
+  _plantsResolving.clear();
+};
+
 // --- Date Calculation Helpers ---
 export const getStartOfDay = (date: Date): Date => {
   const d = new Date(date);
@@ -1426,25 +1439,46 @@ export const deleteGarden = async (id: string): Promise<void> => {
 };
 
 export const getPlants = async (gardenId: string | null = null, includeArchived: boolean = false): Promise<Plant[]> => {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const cacheKey = plantsCacheKey(gardenId, includeArchived);
 
-  if (isSupabaseConfigured && supabase) {
-    let query = supabase.from("plants").select("*").eq("user_id", user.id);
-    if (gardenId) query = query.eq("garden_id", gardenId);
-    if (!includeArchived) query = query.eq("archived", false);
-    
-    const { data, error } = await query.order("created_at", { ascending: false });
-    if (error) throw error;
-    return data || [];
-  }
+  // Return cached result immediately
+  if (_plantsCache.has(cacheKey)) return _plantsCache.get(cacheKey)!;
 
-  // Local Storage Fallback
-  const db = loadLocalDatabase(user.id);
-  let list = db.plants;
-  if (gardenId) list = list.filter(p => p.garden_id === gardenId);
-  if (!includeArchived) list = list.filter(p => !p.archived);
-  return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  // Reuse in-flight promise for parallel callers
+  if (_plantsResolving.has(cacheKey)) return _plantsResolving.get(cacheKey)!;
+
+  const promise = (async () => {
+    try {
+      const user = await getCurrentUser();
+      if (!user) return [];
+
+      let result: Plant[];
+
+      if (isSupabaseConfigured && supabase) {
+        let query = supabase.from("plants").select("*").eq("user_id", user.id);
+        if (gardenId) query = query.eq("garden_id", gardenId);
+        if (!includeArchived) query = query.eq("archived", false);
+        const { data, error } = await query.order("created_at", { ascending: false });
+        if (error) throw error;
+        result = data || [];
+      } else {
+        // Local Storage Fallback
+        const db = loadLocalDatabase(user.id);
+        let list = db.plants;
+        if (gardenId) list = list.filter(p => p.garden_id === gardenId);
+        if (!includeArchived) list = list.filter(p => !p.archived);
+        result = list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      }
+
+      _plantsCache.set(cacheKey, result);
+      return result;
+    } finally {
+      _plantsResolving.delete(cacheKey);
+    }
+  })();
+
+  _plantsResolving.set(cacheKey, promise);
+  return promise;
 };
 
 export const getPlantById = async (id: string): Promise<Plant | null> => {
@@ -1487,6 +1521,7 @@ export const createPlant = async (plant: Omit<Plant, "id" | "user_id" | "archive
       .select()
       .single();
     if (error) throw error;
+    invalidatePlantsCache();
     return data;
   }
 
@@ -1494,6 +1529,7 @@ export const createPlant = async (plant: Omit<Plant, "id" | "user_id" | "archive
   const allPlants = getLocalStorageData<Plant>(PLANTS_KEY, DEFAULT_PLANTS(user.id));
   allPlants.push(newPlant);
   saveLocalStorageData(PLANTS_KEY, allPlants);
+  invalidatePlantsCache();
   return newPlant;
 };
 
@@ -1510,6 +1546,7 @@ export const updatePlant = async (id: string, updates: Partial<Plant>): Promise<
       .select()
       .single();
     if (error) throw error;
+    invalidatePlantsCache();
     return data;
   }
 
@@ -1521,6 +1558,7 @@ export const updatePlant = async (id: string, updates: Partial<Plant>): Promise<
   const updated = { ...allPlants[idx], ...updates };
   allPlants[idx] = updated;
   saveLocalStorageData(PLANTS_KEY, allPlants);
+  invalidatePlantsCache();
   return updated;
 };
 
@@ -1535,6 +1573,7 @@ export const deletePlant = async (id: string): Promise<void> => {
       .eq("id", id)
       .eq("user_id", user.id);
     if (error) throw error;
+    invalidatePlantsCache();
     return;
   }
 
@@ -1548,6 +1587,7 @@ export const deletePlant = async (id: string): Promise<void> => {
 
   const allScheds = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
   saveLocalStorageData(SCHEDULES_KEY, allScheds.filter(s => !(s.plant_id === id && s.user_id === user.id)));
+  invalidatePlantsCache();
 };
 
 export const archivePlant = async (id: string, archiveState: boolean): Promise<Plant> => {
