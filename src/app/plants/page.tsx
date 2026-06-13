@@ -1534,6 +1534,190 @@ function PlantsContent() {
               )}
             </div>
           </Modal>
+
+          {/* GARDEN FORM MODAL */}
+          <Modal
+            isOpen={gardenModalOpen}
+            onClose={() => setGardenModalOpen(false)}
+            title={editingGarden ? t("gardens.editGarden") : t("gardens.addGarden")}
+          >
+            <form onSubmit={handleGardenSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("gardens.name")} *</label>
+                <input
+                  type="text"
+                  value={gardenName}
+                  onChange={(e) => setGardenName(e.target.value)}
+                  placeholder={t("gardens.placeholderName")}
+                  className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("gardens.description")}</label>
+                <textarea
+                  value={gardenDesc}
+                  onChange={(e) => setGardenDesc(e.target.value)}
+                  placeholder={t("gardens.placeholderDesc")}
+                  rows={3}
+                  className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <ImageUploadInput
+                  value={gardenCover}
+                  onChange={setGardenCover}
+                  placeholder="https://images.unsplash.com/photo-..."
+                  label={t("gardens.coverImage")}
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setGardenModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold border border-zinc-200 rounded-lg hover:bg-zinc-50 cursor-pointer"
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm cursor-pointer"
+                >
+                  {t("common.save")}
+                </button>
+              </div>
+            </form>
+          </Modal>
+
+          {/* PLANT FORM MODAL */}
+          <Modal
+            isOpen={plantModalOpen}
+            onClose={() => setPlantModalOpen(false)}
+            title={editingPlant ? t("plants.editPlant") : t("plants.addPlant")}
+          >
+            <form onSubmit={handlePlantSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("plants.name")}</label>
+                  <input
+                    type="text"
+                    value={plantName}
+                    onChange={(e) => setPlantName(e.target.value)}
+                    placeholder={t("plants.placeholderName")}
+                    className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-bold"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("plants.species")}</label>
+                  <input
+                    type="text"
+                    value={plantSpecies}
+                    onChange={(e) => setPlantSpecies(e.target.value)}
+                    placeholder={t("plants.placeholderSpecies")}
+                    className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-semibold font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("plants.garden")}</label>
+                  <select
+                    value={plantGardenId}
+                    onChange={(e) => setPlantGardenId(e.target.value)}
+                    className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-semibold"
+                  >
+                    <option value="">{t("plants.noGarden")}</option>
+                    {gardens.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("plants.location")}</label>
+                  <input
+                    type="text"
+                    value={plantLoc}
+                    onChange={(e) => setPlantLoc(e.target.value)}
+                    placeholder={t("plants.placeholderLocation")}
+                    className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("plants.plantingDate")}</label>
+                  <input
+                    type="date"
+                    value={plantDate}
+                    onChange={(e) => setPlantDate(e.target.value)}
+                    className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-bold font-mono"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("plants.status")}</label>
+                  <select
+                    value={plantStatus}
+                    onChange={(e) => setPlantStatus(e.target.value as any)}
+                    className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-bold"
+                  >
+                    <option value="healthy">{t("plants.statusHealthy")}</option>
+                    <option value="flowering">{t("plants.statusFlowering")}</option>
+                    <option value="fruiting">{t("plants.statusFruiting")}</option>
+                    <option value="dormant">{t("plants.statusDormant")}</option>
+                    <option value="sick">{t("plants.statusSick")}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("plants.notes")}</label>
+                <textarea
+                  value={plantNotes}
+                  onChange={(e) => setPlantNotes(e.target.value)}
+                  rows={3}
+                  className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <ImageUploadInput
+                  value={plantCover}
+                  onChange={setPlantCover}
+                  placeholder="https://images.unsplash.com/photo-..."
+                  label={t("plants.coverImage")}
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPlantModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold border border-zinc-200 rounded-lg hover:bg-zinc-50 cursor-pointer"
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm cursor-pointer"
+                >
+                  {t("common.save")}
+                </button>
+              </div>
+            </form>
+          </Modal>
         </div>
       </AppShell>
     );
