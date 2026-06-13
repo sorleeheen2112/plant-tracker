@@ -67,33 +67,62 @@ const notifyAuthStateChange = (user: UserProfile | null) => {
   authStateListeners.forEach(listener => listener({ user }));
 };
 
+// --- In-memory cache to prevent redundant Supabase calls ---
+let _cachedUser: UserProfile | null = null;
+let _cacheResolving: Promise<UserProfile | null> | null = null;
+
+export const invalidateUserCache = () => {
+  _cachedUser = null;
+  _cacheResolving = null;
+};
+
 export const getCurrentUser = async (): Promise<UserProfile | null> => {
   if (isSupabaseConfigured && supabase) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    // Return cached user if available
+    if (_cachedUser) return _cachedUser;
 
-    // Fetch profile
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
+    // If a fetch is already in-flight, reuse that promise (avoids duplicate parallel requests)
+    if (_cacheResolving) return _cacheResolving;
 
-    if (error || !data) {
-      // Create profile if missing but user exists in Auth
-      const newProfile: UserProfile = {
-        id: user.id,
-        name: user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
-        email: user.email || "",
-        avatar_url: user.user_metadata?.avatar_url || "",
-        language: "th",
-        theme: "system",
-        created_at: new Date().toISOString(),
-      };
-      await supabase.from("profiles").insert(newProfile);
-      return newProfile;
-    }
-    return data as UserProfile;
+    _cacheResolving = (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          _cachedUser = null;
+          return null;
+        }
+
+        // Fetch profile
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (error || !data) {
+          // Create profile if missing but user exists in Auth
+          const newProfile: UserProfile = {
+            id: user.id,
+            name: user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
+            email: user.email || "",
+            avatar_url: user.user_metadata?.avatar_url || "",
+            language: "th",
+            theme: "system",
+            created_at: new Date().toISOString(),
+          };
+          await supabase.from("profiles").insert(newProfile);
+          _cachedUser = newProfile;
+          return newProfile;
+        }
+
+        _cachedUser = data as UserProfile;
+        return _cachedUser;
+      } finally {
+        _cacheResolving = null;
+      }
+    })();
+
+    return _cacheResolving;
   }
 
   // Local Storage Fallback
@@ -252,6 +281,7 @@ export const signInWithGoogle = async (): Promise<{ user: UserProfile | null; er
 };
 
 export const signOut = async (): Promise<{ error: Error | null }> => {
+  invalidateUserCache();
   if (isSupabaseConfigured && supabase) {
     const { error } = await supabase.auth.signOut();
     notifyAuthStateChange(null);
@@ -315,6 +345,7 @@ export const updateProfile = async (updates: Partial<UserProfile>): Promise<{ us
       .single();
 
     if (error) return { user: null, error };
+    _cachedUser = data as UserProfile;
     notifyAuthStateChange(data);
     return { user: data as UserProfile, error: null };
   }

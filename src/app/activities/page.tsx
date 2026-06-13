@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -33,6 +34,7 @@ import {
 export default function ActivitiesPage() {
   const { t, language } = useTranslation();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
@@ -216,11 +218,18 @@ export default function ActivitiesPage() {
                   
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-black text-zinc-800 dark:text-zinc-100">
-                        {act.type === "bulk_watering"
-                          ? (language === "th" ? "ทุกต้น" : "All Plants")
-                          : act.plant_name}
-                      </span>
+                      {act.type === "bulk_watering" ? (
+                        <span className="text-xs font-black text-zinc-800 dark:text-zinc-100">
+                          {language === "th" ? "ทุกต้น" : "All Plants"}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => router.push(`/plants?id=${act.plant_id}`)}
+                          className="text-xs font-black text-emerald-700 dark:text-emerald-400 hover:underline hover:text-emerald-600 dark:hover:text-emerald-300 transition-colors cursor-pointer text-left"
+                        >
+                          {act.plant_name}
+                        </button>
+                      )}
                       <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase font-semibold ${
                         act.type === "bulk_watering"
                           ? "text-blue-700 bg-blue-50 dark:text-blue-400 dark:bg-blue-950/20"
