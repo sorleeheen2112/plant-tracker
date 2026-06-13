@@ -7,6 +7,7 @@ import { useTranslation } from "@/context/LanguageContext";
 import { useToast } from "@/context/ToastContext";
 import { useTheme } from "@/context/ThemeContext";
 import { Settings, User, Globe, Moon, Save, Languages } from "lucide-react";
+import { ImageUploadInput } from "@/components/ui/ImageUploadInput";
 
 export default function SettingsPage() {
   const { user, updateUserProfile } = useAuth();
@@ -113,12 +114,10 @@ export default function SettingsPage() {
                   alt="Avatar snap"
                   className="h-14 w-14 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 shrink-0 bg-zinc-50"
                 />
-                <input
-                  type="url"
+                <ImageUploadInput
                   value={avatarUrl}
-                  onChange={(e) => setAvatarUrl(e.target.value)}
+                  onChange={setAvatarUrl}
                   placeholder="https://images.unsplash.com/photo-..."
-                  className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium font-mono"
                 />
               </div>
             </div>

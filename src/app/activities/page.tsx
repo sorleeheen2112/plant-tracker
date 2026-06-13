@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ImageUploadInput } from "@/components/ui/ImageUploadInput";
 import { useTranslation } from "@/context/LanguageContext";
 import { useToast } from "@/context/ToastContext";
 import {
@@ -36,6 +37,7 @@ export default function ActivitiesPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 
   // Filters State
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("all");
@@ -243,7 +245,8 @@ export default function ActivitiesPage() {
                         <img
                           src={act.photo_url}
                           alt="milestone snapshot"
-                          className="h-48 w-full object-cover bg-zinc-100"
+                          className="h-48 w-full object-cover bg-zinc-100 cursor-zoom-in hover:opacity-90 transition-opacity"
+                          onClick={() => setSelectedPhoto(act.photo_url || null)}
                         />
                       </div>
                     )}
@@ -315,13 +318,11 @@ export default function ActivitiesPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("activities.photo")}</label>
-              <input
-                type="url"
+              <ImageUploadInput
                 value={actPhoto}
-                onChange={(e) => setActPhoto(e.target.value)}
+                onChange={setActPhoto}
                 placeholder="https://images.unsplash.com/photo-..."
-                className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium font-mono"
+                label={t("activities.photo")}
               />
             </div>
 
@@ -341,6 +342,23 @@ export default function ActivitiesPage() {
               </button>
             </div>
           </form>
+        </Modal>
+
+        {/* PHOTO PREVIEW MODAL */}
+        <Modal
+          isOpen={!!selectedPhoto}
+          onClose={() => setSelectedPhoto(null)}
+          title={t("photos.title")}
+        >
+          <div className="flex flex-col items-center justify-center p-2">
+            {selectedPhoto && (
+              <img
+                src={selectedPhoto}
+                alt="Full size growth milestone"
+                className="max-h-[70vh] max-w-full object-contain rounded-xl shadow-lg bg-zinc-100 dark:bg-zinc-800"
+              />
+            )}
+          </div>
         </Modal>
       </div>
     </AppShell>

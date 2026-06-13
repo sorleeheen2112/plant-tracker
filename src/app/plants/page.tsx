@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ImageUploadInput } from "@/components/ui/ImageUploadInput";
 import { useTranslation } from "@/context/LanguageContext";
 import { useToast } from "@/context/ToastContext";
 import {
@@ -175,6 +176,9 @@ function PlantsContent() {
 
   // Detailed view Tab State
   const [activeTab, setActiveTab] = useState<"overview" | "activities" | "photos" | "schedules" | "fertilizers" | "analytics">("overview");
+
+  // Full-size Photo Preview Modal state
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 
   // Add schedule form states (within detail tab)
   const [schedModalOpen, setSchedModalOpen] = useState(false);
@@ -811,7 +815,8 @@ function PlantsContent() {
                                 <img
                                   src={act.photo_url}
                                   alt="Activity snap"
-                                  className="h-20 rounded-lg object-cover bg-zinc-100 mt-2"
+                                  className="h-20 rounded-lg object-cover bg-zinc-100 mt-2 cursor-zoom-in hover:opacity-90 transition-opacity"
+                                  onClick={() => setSelectedPhoto(act.photo_url || null)}
                                 />
                               )}
                             </div>
@@ -863,7 +868,8 @@ function PlantsContent() {
                           <img
                             src={act.photo_url}
                             alt="growth milestone"
-                            className="h-32 w-full object-cover bg-zinc-100"
+                            className="h-32 w-full object-cover bg-zinc-100 cursor-zoom-in hover:opacity-90 transition-opacity"
+                            onClick={() => setSelectedPhoto(act.photo_url || null)}
                           />
                           <div className="p-3">
                             <p className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 dark:text-emerald-450 dark:bg-emerald-950/25 px-1.5 py-0.5 rounded uppercase w-fit font-semibold">
@@ -1291,13 +1297,11 @@ function PlantsContent() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("activities.photo")}</label>
-                <input
-                  type="url"
+                <ImageUploadInput
                   value={actPhoto}
-                  onChange={(e) => setActPhoto(e.target.value)}
+                  onChange={setActPhoto}
                   placeholder="https://images.unsplash.com/photo-..."
-                  className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium font-mono"
+                  label={t("activities.photo")}
                 />
               </div>
 
@@ -1512,6 +1516,23 @@ function PlantsContent() {
                 </div>
               </form>
             )}
+          </Modal>
+
+          {/* PHOTO PREVIEW MODAL */}
+          <Modal
+            isOpen={!!selectedPhoto}
+            onClose={() => setSelectedPhoto(null)}
+            title={t("photos.title")}
+          >
+            <div className="flex flex-col items-center justify-center p-2">
+              {selectedPhoto && (
+                <img
+                  src={selectedPhoto}
+                  alt="Full size growth milestone"
+                  className="max-h-[70vh] max-w-full object-contain rounded-xl shadow-lg bg-zinc-100 dark:bg-zinc-800"
+                />
+              )}
+            </div>
           </Modal>
         </div>
       </AppShell>
@@ -1796,13 +1817,11 @@ function PlantsContent() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("gardens.coverImage")}</label>
-              <input
-                type="url"
+              <ImageUploadInput
                 value={gardenCover}
-                onChange={(e) => setGardenCover(e.target.value)}
+                onChange={setGardenCover}
                 placeholder="https://images.unsplash.com/photo-..."
-                className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium font-mono"
+                label={t("gardens.coverImage")}
               />
             </div>
 
@@ -1925,13 +1944,11 @@ function PlantsContent() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{t("plants.coverImage")}</label>
-              <input
-                type="url"
+              <ImageUploadInput
                 value={plantCover}
-                onChange={(e) => setPlantCover(e.target.value)}
+                onChange={setPlantCover}
                 placeholder="https://images.unsplash.com/photo-..."
-                className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium font-mono"
+                label={t("plants.coverImage")}
               />
             </div>
 
@@ -1951,6 +1968,23 @@ function PlantsContent() {
               </button>
             </div>
           </form>
+        </Modal>
+
+        {/* PHOTO PREVIEW MODAL */}
+        <Modal
+          isOpen={!!selectedPhoto}
+          onClose={() => setSelectedPhoto(null)}
+          title={t("photos.title")}
+        >
+          <div className="flex flex-col items-center justify-center p-2">
+            {selectedPhoto && (
+              <img
+                src={selectedPhoto}
+                alt="Full size growth milestone"
+                className="max-h-[70vh] max-w-full object-contain rounded-xl shadow-lg bg-zinc-100 dark:bg-zinc-800"
+              />
+            )}
+          </div>
         </Modal>
       </div>
     </AppShell>

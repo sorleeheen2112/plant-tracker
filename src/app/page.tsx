@@ -41,21 +41,19 @@ export default function HomePage() {
           <div className="flex gap-0.5 bg-zinc-100 dark:bg-zinc-950 rounded-lg p-0.5 border border-zinc-200/60 dark:border-zinc-850">
             <button
               onClick={() => setLanguage("en")}
-              className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-all ${
-                language === "en"
-                  ? "bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-xs border border-zinc-200/50"
-                  : "text-zinc-400 hover:text-zinc-650"
-              }`}
+              className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-all ${language === "en"
+                ? "bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-xs border border-zinc-200/50"
+                : "text-zinc-400 hover:text-zinc-650"
+                }`}
             >
               EN
             </button>
             <button
               onClick={() => setLanguage("th")}
-              className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-all ${
-                language === "th"
-                  ? "bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-xs border border-zinc-200/50"
-                  : "text-zinc-400 hover:text-zinc-650"
-              }`}
+              className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-all ${language === "th"
+                ? "bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-xs border border-zinc-200/50"
+                : "text-zinc-400 hover:text-zinc-650"
+                }`}
             >
               TH
             </button>

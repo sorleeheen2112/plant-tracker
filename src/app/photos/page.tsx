@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Modal } from "@/components/ui/Modal";
 import { useTranslation } from "@/context/LanguageContext";
 import { useToast } from "@/context/ToastContext";
 import {
@@ -27,6 +28,7 @@ export default function PhotosPage() {
   const [photos, setPhotos] = useState<Activity[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 
   // Before/After Slider state
   const [selectedPlantId, setSelectedPlantId] = useState<string>("");
@@ -250,11 +252,12 @@ export default function PhotosPage() {
                     key={act.id}
                     className="group border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden bg-white dark:bg-zinc-900 hover:border-emerald-500 hover:shadow-md transition-all duration-200"
                   >
-                    <div className="h-40 overflow-hidden bg-zinc-150 relative">
+                    <div className="h-40 overflow-hidden bg-zinc-150 relative cursor-zoom-in">
                       <img
                         src={act.photo_url}
                         alt={act.plant_name}
-                        className="h-full w-full object-cover group-hover:scale-102 transition-transform"
+                        className="h-full w-full object-cover group-hover:scale-102 transition-transform hover:opacity-90"
+                        onClick={() => setSelectedPhoto(act.photo_url || null)}
                       />
                     </div>
                     <div className="p-4 space-y-1">
@@ -279,6 +282,23 @@ export default function PhotosPage() {
           </div>
         )}
       </div>
+
+      {/* PHOTO PREVIEW MODAL */}
+      <Modal
+        isOpen={!!selectedPhoto}
+        onClose={() => setSelectedPhoto(null)}
+        title={t("photos.title")}
+      >
+        <div className="flex flex-col items-center justify-center p-2">
+          {selectedPhoto && (
+            <img
+              src={selectedPhoto}
+              alt="Full size growth milestone"
+              className="max-h-[70vh] max-w-full object-contain rounded-xl shadow-lg bg-zinc-100 dark:bg-zinc-800"
+            />
+          )}
+        </div>
+      </Modal>
     </AppShell>
   );
 }
