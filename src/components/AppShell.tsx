@@ -195,7 +195,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-zinc-950 transition-colors">
       {/* SIDEBAR - DESKTOP */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 shrink-0">
+      <aside className="hidden lg:flex flex-col w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 shrink-0 h-screen sticky top-0">
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-6 py-5 border-b border-zinc-100 dark:border-zinc-800">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
@@ -207,7 +207,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
         </div>
 
         {/* Links */}
-        <nav className="flex-1 px-4 py-6 space-y-1">
+        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.path || pathname.startsWith(item.path + "/");
