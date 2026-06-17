@@ -29,6 +29,7 @@ import {
   createPlantFertilizer,
   deletePlantFertilizer,
   applyFertilizer,
+  logFertilizationDirect,
   getFertilizerHistory,
   waterAllPlants,
   Garden,
@@ -189,7 +190,7 @@ function PlantsContent() {
 
   // Log activity form states (within detail tab)
   const [actModalOpen, setActModalOpen] = useState(false);
-  const [actType, setActType] = useState<ActivityType>("fertilizing");
+  const [actType, setActType] = useState<ActivityType>("pruning");
   const [actDetails, setActDetails] = useState("");
   const [actNotes, setActNotes] = useState("");
   const [actPhoto, setActPhoto] = useState("");
@@ -770,7 +771,7 @@ function PlantsContent() {
                     {t("plantDetail.quickLog")}
                   </h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {(["fertilizing", "pruning", "repotting", "observation"] as const).map(type => (
+                    {(["pruning", "repotting", "observation"] as const).map(type => (
                       <button
                         key={type}
                         onClick={() => {
@@ -1041,115 +1042,30 @@ function PlantsContent() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-black text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
                     <FlaskConical className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    {t("fertilizers.assignedFertilizers")}
+                    {language === "th" ? "บันทึกประวัติการใส่ปุ๋ย" : "Fertilizer Records"}
                   </h3>
                   <button
                     onClick={() => {
                       setSelectedFertId(fertLibrary[0]?.id || "");
-                      setFertIntervalOverride(null);
-                      setAssignFertModalOpen(true);
+                      setApplyAmount("");
+                      setApplyNote("");
+                      setApplyDate(new Date().toLocaleDateString("sv-SE"));
+                      setApplyModalOpen(true);
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    {t("fertilizers.assignFertilizer")}
+                    {language === "th" ? "ใส่ปุ๋ย" : "Apply Fertilizer"}
                   </button>
                 </div>
 
-                {/* Schedule list */}
-                {plantFertilizers.length === 0 ? (
+                {/* Empty State when no history exists */}
+                {fertHistory.length === 0 && (
                   <div className="bg-white dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl p-8 text-center">
                     <FlaskConical className="h-10 w-10 text-zinc-300 dark:text-zinc-600 mx-auto mb-3" />
-                    <p className="text-sm font-bold text-zinc-500 dark:text-zinc-400">{t("fertilizers.noAssigned")}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {plantFertilizers.map((pf) => {
-                      const statusColor =
-                        pf.task_status === "overdue" ? "bg-rose-100 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 border-rose-200 dark:border-rose-900/30" :
-                        pf.task_status === "due" ? "bg-amber-100 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border-amber-200 dark:border-amber-900/30" :
-                        pf.task_status === "upcoming" ? "bg-blue-50 text-blue-700 dark:bg-blue-950/10 dark:text-blue-400 border-blue-100 dark:border-blue-900/20" :
-                        "bg-zinc-50 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700";
-                      const StatusIcon =
-                        pf.task_status === "overdue" ? AlertCircle :
-                        pf.task_status === "due" ? AlertTriangle :
-                        pf.task_status === "upcoming" ? Clock : Clock;
-
-                      return (
-                        <div key={pf.id} className={`flex items-start gap-4 p-4 bg-white dark:bg-zinc-900 rounded-xl border shadow-xs hover:shadow-sm transition-all ${
-                          pf.task_status === "overdue" ? "border-rose-200 dark:border-rose-900/40" :
-                          pf.task_status === "due" ? "border-amber-200 dark:border-amber-900/40" :
-                          "border-zinc-200 dark:border-zinc-800"
-                        }`}>
-                          {/* Color dot */}
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl mt-0.5"
-                            style={{ backgroundColor: (pf.fertilizer_color || "#10b981") + "22" }}>
-                            <FlaskConical className="h-5 w-5 shrink-0" style={{ color: pf.fertilizer_color || "#10b981" }} />
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-black text-zinc-900 dark:text-zinc-50">{pf.fertilizer_name}</span>
-                              {pf.fertilizer_npk && (
-                                <span className="px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 rounded font-mono font-extrabold text-[10px]">
-                                  {pf.fertilizer_npk}
-                                </span>
-                              )}
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${statusColor}`}>
-                                {pf.task_status === "overdue" ? t("fertilizers.statusOverdue") :
-                                 pf.task_status === "due" ? t("fertilizers.statusDue") :
-                                 pf.task_status === "upcoming" ? t("fertilizers.statusUpcoming") :
-                                 t("fertilizers.statusPending")}
-                              </span>
-                            </div>
-
-                            <div className="mt-1.5 flex items-center gap-4 text-xs font-bold text-zinc-400 dark:text-zinc-500 flex-wrap">
-                              <span>🔁 {language === "th" ? `ทุก ${pf.interval_days} วัน` : `Every ${pf.interval_days} days`}</span>
-                              {pf.next_due_date && (
-                                <span>{t("fertilizers.nextDue")}: {new Date(pf.next_due_date).toLocaleDateString(language === "th" ? "th-TH" : "en-US", { month: "short", day: "numeric" })}</span>
-                              )}
-                              {pf.last_applied_date ? (
-                                <span>{t("fertilizers.lastApplied")}: {new Date(pf.last_applied_date).toLocaleDateString(language === "th" ? "th-TH" : "en-US", { month: "short", day: "numeric" })}</span>
-                              ) : (
-                                <span className="text-zinc-400 dark:text-zinc-600">{t("fertilizers.neverApplied")}</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={() => {
-                                setApplyingPF(pf);
-                                setApplyAmount("");
-                                setApplyNote("");
-                                setApplyDate(new Date().toLocaleDateString("sv-SE"));
-                                setApplyModalOpen(true);
-                              }}
-                              className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                              {t("fertilizers.applyNow")}
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (!confirm(t("fertilizers.confirmRemoveSchedule"))) return;
-                                try {
-                                  await deletePlantFertilizer(pf.id);
-                                  toast(t("fertilizers.removeScheduleSuccess"), "success");
-                                  loadData();
-                                } catch {
-                                  toast(t("fertilizers.removeScheduleError"), "error");
-                                }
-                              }}
-                              className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-all cursor-pointer"
-                              title={t("fertilizers.removeSchedule")}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <p className="text-sm font-bold text-zinc-500 dark:text-zinc-400">
+                      {language === "th" ? "ยังไม่มีประวัติการใส่ปุ๋ยสำหรับต้นไม้นี้" : "No fertilizer history recorded for this plant yet."}
+                    </p>
                   </div>
                 )}
 
@@ -1303,7 +1219,6 @@ function PlantsContent() {
                   onChange={(e) => setActType(e.target.value as any)}
                   className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-bold"
                 >
-                  <option value="fertilizing">{t("activities.fertilized")}</option>
                   <option value="pruning">{t("activities.pruned")}</option>
                   <option value="repotting">{t("activities.repotted")}</option>
                   <option value="pest_control">{t("activities.pest_control")}</option>
@@ -1362,199 +1277,110 @@ function PlantsContent() {
             </form>
           </Modal>
 
-          {/* ASSIGN FERTILIZER MODAL */}
-          <Modal
-            isOpen={assignFertModalOpen}
-            onClose={() => setAssignFertModalOpen(false)}
-            title={t("fertilizers.assignFertilizer")}
-          >
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!selectedFertId) {
-                  toast(t("fertilizers.requiredError", { field: t("fertilizers.selectFertilizer") }), "error");
-                  return;
-                }
-                const chosenFert = fertLibrary.find(f => f.id === selectedFertId);
-                const interval = fertIntervalOverride ?? chosenFert?.default_interval_days ?? 14;
-                try {
-                  await createPlantFertilizer({
-                    plant_id: activePlant.id,
-                    fertilizer_id: selectedFertId,
-                    interval_days: interval,
-                  });
-                  toast(t("fertilizers.assignSuccess"), "success");
-                  setAssignFertModalOpen(false);
-                  loadData();
-                } catch {
-                  toast(t("fertilizers.assignError"), "error");
-                }
-              }}
-              className="space-y-5"
-            >
-              {/* Select fertilizer */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-extrabold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
-                  {t("fertilizers.selectFertilizer")} *
-                </label>
-                <select
-                  value={selectedFertId}
-                  onChange={e => {
-                    setSelectedFertId(e.target.value);
-                    setFertIntervalOverride(null); // reset override when fertilizer changes
-                  }}
-                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all cursor-pointer"
-                  required
-                >
-                  <option value="">— {t("fertilizers.selectFertilizer")} —</option>
-                  {fertLibrary.map(f => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}{f.npk_formula ? ` (${f.npk_formula})` : ""}
-                    </option>
-                  ))}
-                </select>
-                {fertLibrary.length === 0 && (
-                  <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500">
-                    {language === "th" ? "ยังไม่มีปุ๋ยในคลัง — กรุณาเพิ่มปุ๋ยก่อน" : "No fertilizers in library — add fertilizers first."}
-                  </p>
-                )}
-              </div>
-
-              {/* Interval override */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-extrabold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
-                  {t("fertilizers.intervalDays")}
-                </label>
-                {selectedFertId && (
-                  <p className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 mb-1">
-                    {t("fertilizers.useDefault").replace("{days}", String(fertLibrary.find(f => f.id === selectedFertId)?.default_interval_days ?? 14))}
-                  </p>
-                )}
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={fertIntervalOverride ?? fertLibrary.find(f => f.id === selectedFertId)?.default_interval_days ?? 14}
-                    onChange={e => setFertIntervalOverride(Number(e.target.value))}
-                    className="w-24 px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  />
-                  <span className="text-sm font-bold text-zinc-500 dark:text-zinc-400">
-                    {language === "th" ? "วัน" : "days"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setAssignFertModalOpen(false)}
-                  className="px-4 py-2 text-sm font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all cursor-pointer"
-                >
-                  {t("common.cancel")}
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg shadow-sm transition-all cursor-pointer"
-                >
-                  {t("fertilizers.assignFertilizer")}
-                </button>
-              </div>
-            </form>
-          </Modal>
-
           {/* APPLY FERTILIZER MODAL */}
           <Modal
             isOpen={applyModalOpen}
             onClose={() => setApplyModalOpen(false)}
             title={t("fertilizers.applyFertilizer")}
           >
-            {applyingPF && (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  try {
-                    await applyFertilizer(applyingPF.id, applyAmount, applyNote, applyDate);
-                    toast(t("fertilizers.applySuccess"), "success");
-                    setApplyModalOpen(false);
-                    setApplyingPF(null);
-                    loadData();
-                  } catch {
-                    toast(t("fertilizers.applyError"), "error");
-                  }
-                }}
-                className="space-y-4"
-              >
-                {/* Fertilizer info */}
-                <div className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl">
-                  <div className="h-9 w-9 flex items-center justify-center rounded-lg shrink-0"
-                    style={{ backgroundColor: (applyingPF.fertilizer_color || "#10b981") + "22" }}>
-                    <FlaskConical className="h-4.5 w-4.5" style={{ color: applyingPF.fertilizer_color || "#10b981" }} />
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!plantId || !selectedFertId) return;
+                try {
+                  await logFertilizationDirect(plantId, selectedFertId, applyAmount, applyNote, applyDate);
+                  toast(t("fertilizers.applySuccess"), "success");
+                  setApplyModalOpen(false);
+                  loadData();
+                } catch {
+                  toast(t("fertilizers.applyError"), "error");
+                }
+              }}
+              className="space-y-4"
+            >
+              {/* Select Fertilizer Dropdown */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider block">
+                  {t("fertilizers.selectFertilizer")}
+                </label>
+                {fertLibrary.length === 0 ? (
+                  <div className="text-xs text-rose-500 font-semibold p-3 border border-rose-200 bg-rose-50/50 rounded-xl">
+                    {language === "th" ? "ไม่มีปุ๋ยในระบบ กรุณาเพิ่มปุ๋ยก่อน" : "No fertilizers available. Please add a fertilizer first."}
                   </div>
-                  <div>
-                    <p className="text-sm font-black text-zinc-900 dark:text-zinc-50">{applyingPF.fertilizer_name}</p>
-                    <p className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">{applyingPF.fertilizer_npk}</p>
-                  </div>
-                </div>
-
-                {/* Date */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-extrabold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
-                    {t("fertilizers.applyDate")}
-                  </label>
-                  <input
-                    type="date"
-                    value={applyDate}
-                    onChange={e => setApplyDate(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  />
-                </div>
-
-                {/* Amount */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-extrabold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
-                    {t("fertilizers.applyAmount")}
-                  </label>
-                  <input
-                    value={applyAmount}
-                    onChange={e => setApplyAmount(e.target.value)}
-                    placeholder={t("fertilizers.applyAmountPlaceholder")}
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  />
-                </div>
-
-                {/* Note */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-extrabold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
-                    {t("fertilizers.applyNote")}
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={applyNote}
-                    onChange={e => setApplyNote(e.target.value)}
-                    placeholder={language === "th" ? "บันทึกเพิ่มเติม..." : "Optional notes..."}
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none transition-all"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={() => { setApplyModalOpen(false); setApplyingPF(null); }}
-                    className="px-4 py-2 text-sm font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all cursor-pointer"
+                ) : (
+                  <select
+                    value={selectedFertId}
+                    onChange={(e) => setSelectedFertId(e.target.value)}
+                    className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                    required
                   >
-                    {t("common.cancel")}
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    {t("fertilizers.applyFertilizer")}
-                  </button>
-                </div>
-              </form>
-            )}
+                    {fertLibrary.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.npk_formula})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Date */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider block">
+                  {t("fertilizers.applyDate")}
+                </label>
+                <input
+                  type="date"
+                  value={applyDate}
+                  onChange={e => setApplyDate(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                />
+              </div>
+
+              {/* Amount */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider block">
+                  {t("fertilizers.applyAmount")}
+                </label>
+                <input
+                  value={applyAmount}
+                  onChange={e => setApplyAmount(e.target.value)}
+                  placeholder={t("fertilizers.applyAmountPlaceholder")}
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                />
+              </div>
+
+              {/* Note */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider block">
+                  {t("fertilizers.applyNote")}
+                </label>
+                <textarea
+                  rows={2}
+                  value={applyNote}
+                  onChange={e => setApplyNote(e.target.value)}
+                  placeholder={language === "th" ? "บันทึกเพิ่มเติม..." : "Optional notes..."}
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none transition-all"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setApplyModalOpen(false)}
+                  className="px-4 py-2 text-sm font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all cursor-pointer"
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="submit"
+                  disabled={fertLibrary.length === 0}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {t("fertilizers.applyFertilizer")}
+                </button>
+              </div>
+            </form>
           </Modal>
 
           {/* PHOTO PREVIEW MODAL */}

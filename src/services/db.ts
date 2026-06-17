@@ -1862,7 +1862,12 @@ export const deleteSchedule = async (id: string): Promise<void> => {
   saveLocalStorageData(SCHEDULES_KEY, allSchedules.filter(s => !(s.id === id && s.user_id === user.id)));
 };
 
-export const performSchedule = async (id: string, dateStr: string): Promise<Schedule> => {
+export const performSchedule = async (
+  id: string,
+  dateStr: string,
+  customDetails?: string,
+  customNotes?: string
+): Promise<Schedule> => {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
@@ -1876,8 +1881,8 @@ export const performSchedule = async (id: string, dateStr: string): Promise<Sche
     plant_id: found.plant_id,
     type: found.type,
     date: dateStr,
-    details: `Performed recurring scheduled task: ${found.type.charAt(0).toUpperCase() + found.type.slice(1)}`,
-    notes: "Marked as completed from schedules planner."
+    details: customDetails || `Performed recurring scheduled task: ${found.type.charAt(0).toUpperCase() + found.type.slice(1)}`,
+    notes: customNotes || "Marked as completed from schedules planner."
   });
 
   // Update last_performed
@@ -2493,6 +2498,66 @@ export const applyFertilizer = async (
   };
 
   return { plantFertilizer: enrichedPF, history: enrichedHistory };
+};
+
+export const logFertilizationDirect = async (
+  plantId: string,
+  fertilizerId: string,
+  amount: string,
+  note: string,
+  dateStr?: string
+): Promise<FertilizerHistory> => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Not authenticated");
+
+  let applied_date = dateStr || new Date().toISOString();
+  if (applied_date.length === 10) {
+    const todayLocal = new Date().toLocaleDateString("sv-SE");
+    if (applied_date === todayLocal) {
+      applied_date = new Date().toISOString();
+    } else {
+      applied_date = new Date(`${applied_date}T00:00:00`).toISOString();
+    }
+  }
+
+  // 1. Write FertilizerHistory record
+  const historyRecord: FertilizerHistory = {
+    id: crypto.randomUUID(),
+    user_id: user.id,
+    plant_id: plantId,
+    fertilizer_id: fertilizerId,
+    applied_date,
+    amount,
+    note,
+    created_at: new Date().toISOString(),
+  };
+  const allHistory = getLocalStorageData<FertilizerHistory>(FERTILIZER_HISTORY_KEY, []);
+  allHistory.push(historyRecord);
+  saveLocalStorageData(FERTILIZER_HISTORY_KEY, allHistory);
+
+  // 2. Also write to Activities log so Calendar/Dashboard timeline stays populated
+  const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
+  const fertInfo = fertilizers.find(f => f.id === fertilizerId);
+  const fertLabel = fertInfo ? `${fertInfo.name} (${fertInfo.npk_formula})` : "Fertilizer";
+
+  await createActivity({
+    plant_id: plantId,
+    type: "fertilizing",
+    date: applied_date,
+    details: `ใส่ปุ๋ย: ${fertLabel}${amount ? ` — ${amount}` : ""}`,
+    notes: note,
+  });
+
+  const plants = getLocalStorageData<Plant>(PLANTS_KEY, []);
+  const plant = plants.find(p => p.id === plantId);
+
+  return {
+    ...historyRecord,
+    plant_name: plant ? plant.name : "Unknown Plant",
+    fertilizer_name: fertInfo ? fertInfo.name : "Unknown",
+    fertilizer_npk: fertInfo ? fertInfo.npk_formula : "",
+    fertilizer_color: fertInfo ? fertInfo.color : "#10b981",
+  };
 };
 
 // --- Fertilizer History ---

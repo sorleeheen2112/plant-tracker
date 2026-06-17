@@ -49,7 +49,7 @@ export default function ActivitiesPage() {
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [plantId, setPlantId] = useState("");
-  const [actType, setActType] = useState<ActivityType>("fertilizing");
+  const [actType, setActType] = useState<ActivityType>("pruning");
 
   const [actDetails, setActDetails] = useState("");
   const [actNotes, setActNotes] = useState("");
@@ -180,7 +180,6 @@ export default function ActivitiesPage() {
             >
               <option value="all">{t("activities.allTypes")}</option>
               <option value="bulk_watering">{t("activities.bulk_watering")}</option>
-              <option value="fertilizing">{t("activities.fertilized")}</option>
               <option value="pruning">{t("activities.pruned")}</option>
               <option value="repotting">{t("activities.repotted")}</option>
               <option value="pest_control">{t("activities.pest_control")}</option>
@@ -306,7 +305,6 @@ export default function ActivitiesPage() {
                 onChange={(e) => setActType(e.target.value as any)}
                 className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-bold"
               >
-                <option value="fertilizing">{t("activities.fertilized")}</option>
                 <option value="pruning">{t("activities.pruned")}</option>
                 <option value="repotting">{t("activities.repotted")}</option>
                 <option value="pest_control">{t("activities.pest_control")}</option>
