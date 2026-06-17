@@ -1914,7 +1914,9 @@ export const performSchedule = async (
   id: string,
   dateStr: string,
   customDetails?: string,
-  customNotes?: string
+  customNotes?: string,
+  fertilizerId?: string,
+  fertilizerAmount?: string
 ): Promise<Schedule> => {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
@@ -1923,6 +1925,62 @@ export const performSchedule = async (
   const schedules = await getSchedules();
   const found = schedules.find(s => s.id === id);
   if (!found) throw new Error("Schedule not found");
+
+  // If this schedule is a "fertilizing" type, let's also write a FertilizerHistory record!
+  if (found.type === "fertilizing") {
+    try {
+      let targetFertId = fertilizerId;
+      if (!targetFertId) {
+        const fertilizers = await getFertilizers();
+        if (fertilizers.length > 0) {
+          targetFertId = fertilizers[0].id;
+        } else {
+          // If no fertilizers exist, create a default one
+          const defaultFert = await createFertilizer({
+            name: "ปุ๋ยบำรุงทั่วไป",
+            npk_formula: "16-16-16",
+            type: "granular",
+            default_interval_days: 30,
+            color: "#10b981",
+            description: "ปุ๋ยบำรุงเม็ดทั่วไปที่สร้างขึ้นโดยอัตโนมัติ"
+          });
+          targetFertId = defaultFert.id;
+        }
+      }
+
+      const historyRecord: FertilizerHistory = {
+        id: crypto.randomUUID(),
+        user_id: user.id,
+        plant_id: found.plant_id,
+        fertilizer_id: targetFertId,
+        applied_date: dateStr,
+        amount: fertilizerAmount || "1/2 ช้อนชา",
+        note: customNotes || "บันทึกอัตโนมัติจากการติ๊กถูกงานประจำวันบน Dashboard",
+        created_at: new Date().toISOString(),
+      };
+
+      const allHistory = getLocalStorageData<FertilizerHistory>(FERTILIZER_HISTORY_KEY, []);
+      allHistory.push(historyRecord);
+      saveLocalStorageData(FERTILIZER_HISTORY_KEY, allHistory);
+
+      // Update matching plant fertilizer record if it exists
+      const allPF = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, []);
+      const pfIdx = allPF.findIndex(pf => pf.plant_id === found.plant_id && pf.fertilizer_id === targetFertId && pf.user_id === user.id);
+      if (pfIdx !== -1) {
+        const pf = allPF[pfIdx];
+        const nextDue = new Date(dateStr);
+        nextDue.setDate(nextDue.getDate() + pf.interval_days);
+        allPF[pfIdx] = {
+          ...pf,
+          last_applied_date: dateStr,
+          next_due_date: nextDue.toISOString(),
+        };
+        saveLocalStorageData(PLANT_FERTILIZERS_KEY, allPF);
+      }
+    } catch (err) {
+      console.warn("Failed to create fertilizer history during performSchedule:", err);
+    }
+  }
 
   // Log activity
   await createActivity({
@@ -2440,6 +2498,10 @@ export const createPlantFertilizer = async (
 
   const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
   const plants = getLocalStorageData<Plant>(PLANTS_KEY, []);
+
+  // Also sync/create a generic fertilizing Schedule
+  await syncGenericFertilizingSchedule(data.plant_id, new Date().toISOString(), data.interval_days);
+
   return enrichPlantFertilizer(newPF, fertilizers, plants);
 };
 
@@ -2474,6 +2536,45 @@ export const deletePlantFertilizer = async (id: string): Promise<void> => {
 };
 
 // --- Apply Fertilizer (One-Click Workflow) ---
+const syncGenericFertilizingSchedule = async (plantId: string, appliedDate: string, intervalDays: number) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return;
+    const schedules = await getSchedules(plantId);
+    const found = schedules.find(s => s.type === "fertilizing" && s.plant_id === plantId);
+    if (found) {
+      await updateSchedule(found.id, {
+        last_performed: appliedDate,
+        interval_days: intervalDays
+      });
+    } else {
+      // If it doesn't exist, we create a new generic Schedule of type "fertilizing"
+      const newSchedule: Schedule = {
+        id: crypto.randomUUID(),
+        user_id: user.id,
+        plant_id: plantId,
+        type: "fertilizing",
+        interval_days: intervalDays,
+        start_date: appliedDate.substring(0, 10), // YYYY-MM-DD
+        last_performed: appliedDate,
+        created_at: new Date().toISOString()
+      };
+
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase
+          .from("schedules")
+          .insert(newSchedule);
+        if (error) console.error("Failed to insert synced schedule in Supabase:", error);
+      } else {
+        const allSchedules = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
+        allSchedules.push(newSchedule);
+        saveLocalStorageData(SCHEDULES_KEY, allSchedules);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to sync generic fertilizing schedule:", err);
+  }
+};
 
 
 
@@ -2542,6 +2643,9 @@ export const applyFertilizer = async (
     notes: note,
   });
 
+  // Sync generic schedule if it exists
+  await syncGenericFertilizingSchedule(pf.plant_id, applied_date, pf.interval_days);
+
   // 5. Return enriched result
   const plants = getLocalStorageData<Plant>(PLANTS_KEY, []);
   const enrichedPF = enrichPlantFertilizer(updatedPF, fertilizers, plants);
@@ -2593,10 +2697,26 @@ export const logFertilizationDirect = async (
   allHistory.push(historyRecord);
   saveLocalStorageData(FERTILIZER_HISTORY_KEY, allHistory);
 
+  // Update matching plant fertilizer record if it exists
+  const allPF = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, []);
+  const pfIdx = allPF.findIndex(pf => pf.plant_id === plantId && pf.fertilizer_id === fertilizerId && pf.user_id === user.id);
+  if (pfIdx !== -1) {
+    const pf = allPF[pfIdx];
+    const nextDue = new Date(applied_date);
+    nextDue.setDate(nextDue.getDate() + pf.interval_days);
+    allPF[pfIdx] = {
+      ...pf,
+      last_applied_date: applied_date,
+      next_due_date: nextDue.toISOString(),
+    };
+    saveLocalStorageData(PLANT_FERTILIZERS_KEY, allPF);
+  }
+
   // 2. Also write to Activities log so Calendar/Dashboard timeline stays populated
   const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
   const fertInfo = fertilizers.find(f => f.id === fertilizerId);
   const fertLabel = fertInfo ? `${fertInfo.name} (${fertInfo.npk_formula})` : "Fertilizer";
+  const intervalDays = fertInfo ? fertInfo.default_interval_days : 30;
 
   await createActivity({
     plant_id: plantId,
@@ -2605,6 +2725,9 @@ export const logFertilizationDirect = async (
     details: `ใส่ปุ๋ย: ${fertLabel}${amount ? ` — ${amount}` : ""}`,
     notes: note,
   });
+
+  // Update generic fertilizing schedule if it exists
+  await syncGenericFertilizingSchedule(plantId, applied_date, intervalDays);
 
   const plants = getLocalStorageData<Plant>(PLANTS_KEY, []);
   const plant = plants.find(p => p.id === plantId);

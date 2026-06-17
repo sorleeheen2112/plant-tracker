@@ -396,7 +396,14 @@ export default function DashboardPage() {
         ? (language === "th" ? `ใส่ปุ๋ย: ${fertLabel}${fertilizerAmount ? ` — ${fertilizerAmount}` : ""}` : `Applied: ${fertLabel}${fertilizerAmount ? ` — ${fertilizerAmount}` : ""}`)
         : (language === "th" ? "ใส่ปุ๋ย" : "Fertilizing");
 
-      await performSchedule(activeFertilizingTask.id, todayISO, details, fertilizerNotes);
+      await performSchedule(
+        activeFertilizingTask.id,
+        todayISO,
+        details,
+        fertilizerNotes,
+        selectedFertilizerId,
+        fertilizerAmount
+      );
       toast(t("schedules.taskCompletedMsg"), "success");
       setIsFertilizerModalOpen(false);
       await loadDashboardData();
