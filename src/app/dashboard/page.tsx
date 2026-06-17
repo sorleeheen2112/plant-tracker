@@ -117,15 +117,15 @@ const getActivityConfig = (type: string) => {
 };
 
 interface WeatherData {
-  condition: "sunny" | "rainy" | "cloudy" | "windy";
-  temp: number;
-  humidity: number;
-  windSpeed: number;
-  rainProb: number;
+  condition: "sunny" | "rainy" | "cloudy" | "windy" | "unknown";
+  temp: number | string;
+  humidity: number | string;
+  windSpeed: number | string;
+  rainProb: number | string;
   forecast: {
     dayLabel: string;
-    condition: "sunny" | "rainy" | "cloudy" | "windy";
-    temp: number;
+    condition: "sunny" | "rainy" | "cloudy" | "windy" | "unknown";
+    temp: number | string;
   }[];
 }
 
@@ -295,9 +295,9 @@ export default function DashboardPage() {
           windSpeed: Math.round(currentWind),
           rainProb: rainProbability,
           forecast: mappedForecast.length > 0 ? mappedForecast : [
-            { dayLabel: getForecastDayLabel(1), condition: "sunny", temp: currentTemp },
-            { dayLabel: getForecastDayLabel(2), condition: "cloudy", temp: currentTemp - 1 },
-            { dayLabel: getForecastDayLabel(3), condition: "rainy", temp: currentTemp - 2 }
+            { dayLabel: getForecastDayLabel(1), condition: "unknown", temp: "?" },
+            { dayLabel: getForecastDayLabel(2), condition: "unknown", temp: "?" },
+            { dayLabel: getForecastDayLabel(3), condition: "unknown", temp: "?" }
           ]
         });
       } catch (err) {
@@ -895,13 +895,16 @@ export default function DashboardPage() {
                       {weatherData.forecast.map((fc, i) => (
                         <div key={i} className="flex flex-col items-center justify-center p-2 rounded-xl border border-zinc-100 dark:border-zinc-850 bg-zinc-50/25 dark:bg-zinc-950/10 text-center">
                           <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500">{fc.dayLabel}</span>
-                          <div className="my-1.5 flex items-center justify-center">
+                          <div className="my-1.5 flex items-center justify-center min-h-4.5">
                             {fc.condition === "sunny" && <Sun className="h-4.5 w-4.5 text-amber-500" />}
                             {fc.condition === "rainy" && <CloudRain className="h-4.5 w-4.5 text-blue-500" />}
                             {fc.condition === "cloudy" && <Cloud className="h-4.5 w-4.5 text-zinc-500" />}
                             {fc.condition === "windy" && <Wind className="h-4.5 w-4.5 text-teal-500" />}
+                            {fc.condition === "unknown" && <span className="text-xs font-black text-zinc-400 dark:text-zinc-500 font-mono">?</span>}
                           </div>
-                          <span className="text-[11px] font-black text-zinc-800 dark:text-zinc-200">{fc.temp}°C</span>
+                          <span className="text-[11px] font-black text-zinc-850 dark:text-zinc-200">
+                            {fc.temp === "?" ? "?" : `${fc.temp}°C`}
+                          </span>
                         </div>
                       ))}
                     </div>
