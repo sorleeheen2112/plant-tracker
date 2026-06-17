@@ -25,6 +25,7 @@ export interface Plant {
   archived: boolean;
   last_watered_at?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export type ActivityType =
@@ -1506,12 +1507,14 @@ export const createPlant = async (plant: Omit<Plant, "id" | "user_id" | "archive
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
+  const nowStr = new Date().toISOString();
   const newPlant: Plant = {
     ...plant,
     id: crypto.randomUUID(),
     user_id: user.id,
     archived: false,
-    created_at: new Date().toISOString(),
+    created_at: nowStr,
+    updated_at: nowStr,
   };
 
   if (isSupabaseConfigured && supabase) {
@@ -1520,7 +1523,18 @@ export const createPlant = async (plant: Omit<Plant, "id" | "user_id" | "archive
       .insert(newPlant)
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      console.warn("Failed to insert plant with updated_at, retrying without updated_at column:", error);
+      const { updated_at, ...plantWithoutUpdatedAt } = newPlant;
+      const { data: retryData, error: retryError } = await supabase
+        .from("plants")
+        .insert(plantWithoutUpdatedAt)
+        .select()
+        .single();
+      if (retryError) throw retryError;
+      invalidatePlantsCache();
+      return retryData;
+    }
     invalidatePlantsCache();
     return data;
   }
@@ -1537,15 +1551,32 @@ export const updatePlant = async (id: string, updates: Partial<Plant>): Promise<
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
+  const enrichedUpdates = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
       .from("plants")
-      .update(updates)
+      .update(enrichedUpdates)
       .eq("id", id)
       .eq("user_id", user.id)
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      console.warn("Failed to update plant with updated_at, retrying without updated_at column:", error);
+      const { data: retryData, error: retryError } = await supabase
+        .from("plants")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .select()
+        .single();
+      if (retryError) throw retryError;
+      invalidatePlantsCache();
+      return retryData;
+    }
     invalidatePlantsCache();
     return data;
   }
@@ -1555,7 +1586,7 @@ export const updatePlant = async (id: string, updates: Partial<Plant>): Promise<
   const idx = allPlants.findIndex(p => p.id === id && p.user_id === user.id);
   if (idx === -1) throw new Error("Plant not found");
 
-  const updated = { ...allPlants[idx], ...updates };
+  const updated = { ...allPlants[idx], ...enrichedUpdates };
   allPlants[idx] = updated;
   saveLocalStorageData(PLANTS_KEY, allPlants);
   invalidatePlantsCache();
@@ -1714,6 +1745,15 @@ export const createActivity = async (activity: Omit<Activity, "id" | "user_id" |
       .select()
       .single();
     if (error) throw error;
+
+    if (activity.plant_id && activity.plant_id !== "bulk") {
+      try {
+        await updatePlant(activity.plant_id, {});
+      } catch (err) {
+        console.warn("Failed to update plant updated_at during activity logging:", err);
+      }
+    }
+
     return newActivity;
   }
 
@@ -1735,6 +1775,14 @@ export const createActivity = async (activity: Omit<Activity, "id" | "user_id" |
       return s;
     });
     saveLocalStorageData(SCHEDULES_KEY, updated);
+  }
+
+  if (activity.plant_id && activity.plant_id !== "bulk") {
+    try {
+      await updatePlant(activity.plant_id, {});
+    } catch (err) {
+      console.warn("Failed to update plant updated_at during activity logging:", err);
+    }
   }
 
   return newActivity;
@@ -2029,11 +2077,21 @@ export const waterAllPlants = async (): Promise<{ success: boolean; affectedCoun
     }
     const activePlantIds = activePlants.map(p => p.id);
 
-    // Update last_watered_at for active plants
-    const { error: updatePlantsError } = await supabase
+    // Update last_watered_at and updated_at for active plants
+    let updatePlantsError;
+    const { error: firstTryError } = await supabase
       .from("plants")
-      .update({ last_watered_at: nowStr })
+      .update({ last_watered_at: nowStr, updated_at: nowStr })
       .in("id", activePlantIds);
+    
+    if (firstTryError) {
+      console.warn("Failed to bulk update plants with updated_at, retrying with only last_watered_at:", firstTryError);
+      const { error: retryError } = await supabase
+        .from("plants")
+        .update({ last_watered_at: nowStr })
+        .in("id", activePlantIds);
+      updatePlantsError = retryError;
+    }
     if (updatePlantsError) throw updatePlantsError;
 
     // Update watering schedules for these plants
@@ -2069,7 +2127,7 @@ export const waterAllPlants = async (): Promise<{ success: boolean; affectedCoun
   const allPlants = getLocalStorageData<Plant>(PLANTS_KEY, DEFAULT_PLANTS(userId));
   const updatedPlants = allPlants.map(p => {
     if (activePlantIds.includes(p.id)) {
-      return { ...p, last_watered_at: nowStr };
+      return { ...p, last_watered_at: nowStr, updated_at: nowStr };
     }
     return p;
   });

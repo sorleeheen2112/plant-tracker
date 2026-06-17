@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -504,6 +505,12 @@ function PlantsContent() {
     return matchesGarden && matchesStatus && matchesSearch;
   });
 
+  const sortedPlants = [...filteredPlants].sort((a, b) => {
+    const timeA = new Date(a.updated_at || a.created_at || a.planting_date).getTime();
+    const timeB = new Date(b.updated_at || b.created_at || b.planting_date).getTime();
+    return timeA - timeB;
+  });
+
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "healthy": return t("plants.statusHealthy");
@@ -535,9 +542,9 @@ function PlantsContent() {
         <AppShell>
           <div className="text-center py-12">
             <h3 className="text-lg font-bold">{t("plants.notFound")}</h3>
-            <button onClick={() => router.push("/plants")} className="mt-4 text-emerald-600 font-bold">
+            <Link href="/plants" className="mt-4 text-emerald-600 font-bold hover:underline inline-block">
               {t("plantDetail.backToPlants")}
-            </button>
+            </Link>
           </div>
         </AppShell>
       );
@@ -565,13 +572,13 @@ function PlantsContent() {
         <div className="space-y-6">
           {/* Back button & Action buttons */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <button
-              onClick={() => router.push("/plants")}
+            <Link
+              href="/plants"
               className="inline-flex items-center gap-1.5 text-sm font-bold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
             >
               <ChevronLeft className="h-4.5 w-4.5" />
               {t("plantDetail.backToPlants")}
-            </button>
+            </Link>
 
             <div className="flex gap-2">
               <button
@@ -1778,7 +1785,7 @@ function PlantsContent() {
             />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredPlants.map((plant) => (
+              {sortedPlants.map((plant) => (
                 <div
                   key={plant.id}
                   onClick={() => router.push(`/plants?id=${plant.id}`)}
