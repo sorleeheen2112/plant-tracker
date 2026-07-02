@@ -100,7 +100,31 @@ create policy "Allow all plant actions for owners" on public.plants
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 
--- 4. ACTIVITIES TABLE
+-- 4. FERTILIZERS TABLE
+-- Holds the user's custom fertilizer types
+create table public.fertilizers (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  name text not null,
+  npk_formula text,
+  type text check (type in ('granular', 'liquid', 'organic', 'compost', 'foliar', 'other')) not null,
+  default_interval_days integer check (default_interval_days > 0) not null,
+  color text,
+  description text,
+  is_archived boolean default false not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS for Fertilizers
+alter table public.fertilizers enable row level security;
+
+-- Policies for Fertilizers
+create policy "Allow all fertilizer actions for owners" on public.fertilizers
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+
+-- 5. ACTIVITIES TABLE
 -- Timeline logs of gardening interactions (e.g. watered, fertilized)
 create table public.activities (
   id uuid default gen_random_uuid() primary key,
@@ -111,6 +135,8 @@ create table public.activities (
   details text,
   notes text,
   photo_url text,
+  fertilizer_id uuid references public.fertilizers(id) on delete set null,
+  fertilizer_amount text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -122,7 +148,7 @@ create policy "Allow all activity actions for owners" on public.activities
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 
--- 5. SCHEDULES TABLE
+-- 6. SCHEDULES TABLE
 -- Defines recurring intervals for tasks. Next due dates are computed on client: last_performed + interval_days
 create table public.schedules (
   id uuid default gen_random_uuid() primary key,
@@ -132,6 +158,7 @@ create table public.schedules (
   interval_days integer check (interval_days > 0) not null,
   start_date date not null,
   last_performed timestamp with time zone,
+  fertilizer_id uuid references public.fertilizers(id) on delete cascade,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -143,7 +170,7 @@ create policy "Allow all schedule actions for owners" on public.schedules
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 
--- 6. NOTIFICATIONS TABLE
+-- 7. NOTIFICATIONS TABLE
 -- Persistent notifications pushed to the user's dashboard (e.g. system warnings, alerts)
 create table public.notifications (
   id uuid default gen_random_uuid() primary key,
@@ -165,7 +192,7 @@ create policy "Allow all notification actions for owners" on public.notification
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 
--- 7. BULK WATERING HISTORY TABLE
+-- 8. BULK WATERING HISTORY TABLE
 create table public.bulk_watering_history (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references public.profiles(id) on delete cascade not null,

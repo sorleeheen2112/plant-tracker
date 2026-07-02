@@ -74,6 +74,8 @@ export const en = {
     activitiesMonth: "Activities This Month",
     todaysTasks: "Today's Tasks",
     upcomingTasks: "Upcoming Tasks (Next 7 Days)",
+    overdueTasksBox: "Overdue Tasks (Forgot to do)",
+    overdueDaysCount: "{days} days overdue",
     recentActivities: "Recent Activities",
     plantHealthOverview: "Plant Health Overview",
     monthlyActivityChart: "Monthly Care Activities",

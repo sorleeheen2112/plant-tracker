@@ -48,10 +48,15 @@ export interface Activity {
   details: string;
   notes: string;
   photo_url?: string;
+  fertilizer_id?: string | null;
+  fertilizer_amount?: string | null;
   created_at: string;
   
   // Joined fields
   plant_name?: string;
+  fertilizer_name?: string;
+  fertilizer_npk?: string;
+  fertilizer_color?: string;
 }
 
 export interface Schedule {
@@ -62,6 +67,7 @@ export interface Schedule {
   interval_days: number;
   start_date: string;
   last_performed: string | null;
+  fertilizer_id?: string | null;
   created_at: string;
 
   // Calculated client-side fields
@@ -69,6 +75,11 @@ export interface Schedule {
   task_status?: "due" | "overdue" | "upcoming" | "pending";
   plant_name?: string;
   plant_cover_image?: string;
+  overdue_days?: number;
+  fertilizer_name?: string;
+  fertilizer_npk?: string;
+  fertilizer_color?: string;
+  fertilizer_type?: FertilizerType;
 }
 
 export interface Notification {
@@ -152,8 +163,6 @@ const ACTIVITIES_KEY = "plant_tracker_activities";
 const SCHEDULES_KEY = "plant_tracker_schedules";
 const NOTIFICATIONS_KEY = "plant_tracker_notifications";
 const FERTILIZERS_KEY = "plant_tracker_fertilizers";
-const PLANT_FERTILIZERS_KEY = "plant_tracker_plant_fertilizers";
-const FERTILIZER_HISTORY_KEY = "plant_tracker_fertilizer_history";
 
 // --- In-memory Plants Cache ---
 // Keyed by "gardenId:includeArchived". Shared promise prevents duplicate parallel fetches.
@@ -196,16 +205,29 @@ export const determineTaskStatus = (nextDue: Date): "due" | "overdue" | "upcomin
 };
 
 // Expand Schedule with dynamic computations
-export const enrichSchedule = (schedule: Schedule, plants: Plant[]): Schedule => {
+export const enrichSchedule = (schedule: Schedule, plants: Plant[], fertilizers: Fertilizer[] = []): Schedule => {
   const plant = plants.find(p => p.id === schedule.plant_id);
   const nextDue = calculateNextDueDate(schedule.start_date, schedule.interval_days, schedule.last_performed);
+  const status = determineTaskStatus(nextDue);
+
+  const today = getStartOfDay(new Date());
+  const dueDay = getStartOfDay(nextDue);
+  const diffTime = today.getTime() - dueDay.getTime();
+  const overdueDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  const fert = schedule.fertilizer_id && fertilizers ? fertilizers.find(f => f.id === schedule.fertilizer_id) : null;
   
   return {
     ...schedule,
     next_due_date: nextDue.toISOString(),
-    task_status: determineTaskStatus(nextDue),
+    task_status: status,
     plant_name: plant ? plant.name : "Unknown Plant",
     plant_cover_image: plant ? plant.cover_image : "",
+    overdue_days: status === "overdue" ? (overdueDays <= 0 ? 1 : overdueDays) : 0,
+    fertilizer_name: fert ? fert.name : undefined,
+    fertilizer_npk: fert ? fert.npk_formula : undefined,
+    fertilizer_color: fert ? fert.color : undefined,
+    fertilizer_type: fert ? fert.type : undefined,
   };
 };
 
@@ -443,7 +465,8 @@ const DEFAULT_PLANTS = (userId: string): Plant[] => [
   }
 ];
 
-const DEFAULT_ACTIVITIES = (userId: string): Activity[] => [
+const DEFAULT_ACTIVITIES = (userId: string): Activity[] => {
+  const rawList: Partial<Activity>[] = [
   {
     "id": "a-1",
     "user_id": userId,
@@ -1074,9 +1097,22 @@ const DEFAULT_ACTIVITIES = (userId: string): Activity[] => [
     "notes": "",
     "created_at": "2026-06-09T00:00:00.000Z"
   }
-];
+  ];
+  return rawList.map(a => {
+    if (a.type === "fertilizing") {
+      const isRose = ["p-3", "p-8", "p-13"].includes(a.plant_id || "");
+      return {
+        ...a,
+        fertilizer_id: isRose ? "fert-2" : "fert-1",
+        fertilizer_amount: "1/2 ช้อนชา"
+      } as Activity;
+    }
+    return a as Activity;
+  });
+};
 
-const DEFAULT_SCHEDULES = (userId: string): Schedule[] => [
+const DEFAULT_SCHEDULES = (userId: string): Schedule[] => {
+  const rawList: Partial<Schedule>[] = [
   {
     "id": "s-1",
     "user_id": userId,
@@ -1317,17 +1353,98 @@ const DEFAULT_SCHEDULES = (userId: string): Schedule[] => [
     "last_performed": "2026-06-09T10:54:45.282Z",
     "created_at": "2026-05-16T10:54:45.282Z"
   }
-];
+  ];
+  return rawList.map(s => {
+    if (s.type === "fertilizing") {
+      const isRose = ["p-3", "p-8", "p-13"].includes(s.plant_id || "");
+      return { ...s, fertilizer_id: isRose ? "fert-2" : "fert-1" } as Schedule;
+    }
+    return s as Schedule;
+  });
+};
+
+const runLocalStorageMigration = (userId: string) => {
+  if (typeof window === "undefined") return;
+
+  const MIGRATED_KEY = `plant_tracker_migrated_v4_${userId}`;
+  if (window.localStorage.getItem(MIGRATED_KEY)) return;
+
+  try {
+    const oldPF = getLocalStorageData<PlantFertilizer>("plant_tracker_plant_fertilizers", []);
+    const oldHistory = getLocalStorageData<FertilizerHistory>("plant_tracker_fertilizer_history", []);
+    const schedules = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(userId));
+    const activities = getLocalStorageData<Activity>(ACTIVITIES_KEY, DEFAULT_ACTIVITIES(userId));
+
+    const updatedSchedules = schedules.filter(s => !(s.type === "fertilizing" && s.user_id === userId));
+
+    oldPF.forEach((pf: PlantFertilizer) => {
+      if (pf.user_id !== userId || !pf.active) return;
+      
+      const newSchedule: Schedule = {
+        id: pf.id,
+        user_id: userId,
+        plant_id: pf.plant_id,
+        type: "fertilizing",
+        interval_days: pf.interval_days,
+        start_date: pf.created_at ? pf.created_at.substring(0, 10) : new Date().toLocaleDateString("sv-SE"),
+        last_performed: pf.last_applied_date || null,
+        fertilizer_id: pf.fertilizer_id,
+        created_at: pf.created_at || new Date().toISOString(),
+      };
+      updatedSchedules.push(newSchedule);
+    });
+
+    const existingActivityIds = new Set(activities.map(a => a.id));
+    
+    oldHistory.forEach((h: FertilizerHistory) => {
+      if (h.user_id !== userId) return;
+      
+      const activityId = h.id || crypto.randomUUID();
+      if (existingActivityIds.has(activityId)) return;
+
+      const fertLabel = h.fertilizer_name || "Fertilizer";
+      const newActivity: Activity = {
+        id: activityId,
+        user_id: userId,
+        plant_id: h.plant_id,
+        type: "fertilizing",
+        date: h.applied_date,
+        details: `ใส่ปุ๋ย: ${fertLabel}${h.amount ? ` — ${h.amount}` : ""}`,
+        notes: h.note || "",
+        fertilizer_id: h.fertilizer_id,
+        fertilizer_amount: h.amount || null,
+        created_at: h.created_at || new Date().toISOString(),
+      };
+      
+      activities.push(newActivity);
+      existingActivityIds.add(activityId);
+    });
+
+    saveLocalStorageData(SCHEDULES_KEY, updatedSchedules);
+    saveLocalStorageData(ACTIVITIES_KEY, activities);
+
+    window.localStorage.removeItem("plant_tracker_plant_fertilizers");
+    window.localStorage.removeItem("plant_tracker_fertilizer_history");
+
+    window.localStorage.setItem(MIGRATED_KEY, "true");
+    console.log("Local storage database schema migration to v4 complete.");
+  } catch (err) {
+    console.error("Failed to run local storage database migration:", err);
+  }
+};
 
 // Hydrates local arrays for an authenticated user
 const loadLocalDatabase = (userId: string) => {
+  runLocalStorageMigration(userId);
+
   const gardens = getLocalStorageData(GARDENS_KEY, DEFAULT_GARDENS(userId)).filter(x => x.user_id === userId);
   const plants = getLocalStorageData(PLANTS_KEY, DEFAULT_PLANTS(userId)).filter(x => x.user_id === userId);
   const activities = getLocalStorageData(ACTIVITIES_KEY, DEFAULT_ACTIVITIES(userId)).filter(x => x.user_id === userId);
   const schedules = getLocalStorageData(SCHEDULES_KEY, DEFAULT_SCHEDULES(userId)).filter(x => x.user_id === userId);
   const notifications = getLocalStorageData<Notification>(NOTIFICATIONS_KEY, []).filter(x => x.user_id === userId);
+  const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(userId)).filter(x => x.user_id === userId);
   
-  return { gardens, plants, activities, schedules, notifications };
+  return { gardens, plants, activities, schedules, notifications, fertilizers };
 };
 
 // --- Database Operations Wrapper ---
@@ -1375,7 +1492,6 @@ export const createGarden = async (name: string, description: string, coverImage
   }
 
   // Local Storage Fallback
-  const db = loadLocalDatabase(user.id);
   const allGardens = getLocalStorageData<Garden>(GARDENS_KEY, DEFAULT_GARDENS(user.id));
   allGardens.push(newGarden);
   saveLocalStorageData(GARDENS_KEY, allGardens);
@@ -1525,6 +1641,7 @@ export const createPlant = async (plant: Omit<Plant, "id" | "user_id" | "archive
       .single();
     if (error) {
       console.warn("Failed to insert plant with updated_at, retrying without updated_at column:", error);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { updated_at, ...plantWithoutUpdatedAt } = newPlant;
       const { data: retryData, error: retryError } = await supabase
         .from("plants")
@@ -1629,6 +1746,8 @@ export const getActivities = async (plantId: string | null = null, limit: number
   const user = await getCurrentUser();
   if (!user) return [];
 
+  const dbFertilizers = await getFertilizers(true);
+
   if (isSupabaseConfigured && supabase) {
     let query = supabase
       .from("activities")
@@ -1647,9 +1766,12 @@ export const getActivities = async (plantId: string | null = null, limit: number
     const { data, error } = await query;
     if (error) throw error;
     
-    const mapped = (data || []).map((a: any) => ({
+    const mapped = (data || []).map((a: Omit<Activity, "plant_name"> & { plants?: { name: string } | null }) => ({
       ...a,
-      plant_name: a.plants?.name || "Unknown Plant"
+      plant_name: a.plants?.name || "Unknown Plant",
+      fertilizer_name: dbFertilizers.find(f => f.id === a.fertilizer_id)?.name || undefined,
+      fertilizer_npk: dbFertilizers.find(f => f.id === a.fertilizer_id)?.npk_formula || undefined,
+      fertilizer_color: dbFertilizers.find(f => f.id === a.fertilizer_id)?.color || undefined,
     }));
 
     let bulkActivities: Activity[] = [];
@@ -1662,7 +1784,7 @@ export const getActivities = async (plantId: string | null = null, limit: number
       if (limit) bulkQuery = bulkQuery.limit(limit);
       const { data: bulkData, error: bulkError } = await bulkQuery;
       if (!bulkError && bulkData) {
-        bulkActivities = bulkData.map((b: any) => ({
+        bulkActivities = bulkData.map((b: { id: string; user_id: string; watered_at: string; affected_plants_count: number; created_at: string }) => ({
           id: b.id,
           user_id: b.user_id,
           plant_id: "bulk",
@@ -1689,16 +1811,20 @@ export const getActivities = async (plantId: string | null = null, limit: number
 
   const mapped = list.map(a => {
     const plant = db.plants.find(p => p.id === a.plant_id);
+    const fert = db.fertilizers.find(f => f.id === a.fertilizer_id);
     return {
       ...a,
-      plant_name: plant ? plant.name : "Unknown Plant"
+      plant_name: plant ? plant.name : "Unknown Plant",
+      fertilizer_name: fert ? fert.name : undefined,
+      fertilizer_npk: fert ? fert.npk_formula : undefined,
+      fertilizer_color: fert ? fert.color : undefined,
     };
   });
 
   let bulkActivities: Activity[] = [];
   if (!plantId) {
-    const storedBulk = getLocalStorageData<any>("plant_tracker_bulk_watering_history", []).filter(b => b.user_id === user.id);
-    bulkActivities = storedBulk.map((b: any) => ({
+    const storedBulk = getLocalStorageData<{ id: string; user_id: string; watered_at: string; affected_plants_count: number; created_at: string }>("plant_tracker_bulk_watering_history", []).filter(b => b.user_id === user.id);
+    bulkActivities = storedBulk.map((b: { id: string; user_id: string; watered_at: string; affected_plants_count: number; created_at: string }) => ({
       id: b.id,
       user_id: b.user_id,
       plant_id: "bulk",
@@ -1739,11 +1865,9 @@ export const createActivity = async (activity: Omit<Activity, "id" | "user_id" |
   };
 
   if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("activities")
-      .insert(newActivity)
-      .select()
-      .single();
+      .insert(newActivity);
     if (error) throw error;
 
     if (activity.plant_id && activity.plant_id !== "bulk") {
@@ -1770,7 +1894,10 @@ export const createActivity = async (activity: Omit<Activity, "id" | "user_id" |
     const allScheds = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
     const updated = allScheds.map(s => {
       if (s.plant_id === activity.plant_id && s.type === activity.type && s.user_id === user.id) {
-        return { ...s, last_performed: activity.date };
+        if (s.type === "fertilizing" && s.fertilizer_id !== activity.fertilizer_id) {
+          return s;
+        }
+        return { ...s, last_performed: activityDate };
       }
       return s;
     });
@@ -1807,11 +1934,15 @@ export const deleteActivity = async (id: string): Promise<void> => {
   saveLocalStorageData(ACTIVITIES_KEY, allActivities.filter(a => !(a.id === id && a.user_id === user.id)));
 };
 
-export const getSchedules = async (plantId: string | null = null): Promise<Schedule[]> => {
+export const getSchedules = async (
+  plantId: string | null = null,
+  includeArchived: boolean = false
+): Promise<Schedule[]> => {
   const user = await getCurrentUser();
   if (!user) return [];
 
   const dbPlants = await getPlants(null, true);
+  const dbFertilizers = await getFertilizers(true);
 
   if (isSupabaseConfigured && supabase) {
     let query = supabase.from("schedules").select("*").eq("user_id", user.id).neq("type", "watering");
@@ -1820,7 +1951,14 @@ export const getSchedules = async (plantId: string | null = null): Promise<Sched
     const { data, error } = await query;
     if (error) throw error;
 
-    return (data || []).map(s => enrichSchedule(s, dbPlants));
+    let list = (data || []).map(s => enrichSchedule(s, dbPlants, dbFertilizers));
+    if (!plantId && !includeArchived) {
+      list = list.filter(s => {
+        const plant = dbPlants.find(p => p.id === s.plant_id);
+        return plant ? !plant.archived : false;
+      });
+    }
+    return list;
   }
 
   // Local Storage Fallback
@@ -1828,7 +1966,14 @@ export const getSchedules = async (plantId: string | null = null): Promise<Sched
   let list = db.schedules.filter(s => s.type !== "watering");
   if (plantId) list = list.filter(s => s.plant_id === plantId);
   
-  return list.map(s => enrichSchedule(s, dbPlants));
+  let enrichedList = list.map(s => enrichSchedule(s, dbPlants, db.fertilizers));
+  if (!plantId && !includeArchived) {
+    enrichedList = enrichedList.filter(s => {
+      const plant = dbPlants.find(p => p.id === s.plant_id);
+      return plant ? !plant.archived : false;
+    });
+  }
+  return enrichedList;
 };
 
 export const createSchedule = async (schedule: Omit<Schedule, "id" | "user_id" | "last_performed" | "created_at">): Promise<Schedule> => {
@@ -1844,6 +1989,7 @@ export const createSchedule = async (schedule: Omit<Schedule, "id" | "user_id" |
   };
 
   const dbPlants = await getPlants(null, true);
+  const dbFertilizers = await getFertilizers(true);
 
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
@@ -1852,14 +1998,14 @@ export const createSchedule = async (schedule: Omit<Schedule, "id" | "user_id" |
       .select()
       .single();
     if (error) throw error;
-    return enrichSchedule(data, dbPlants);
+    return enrichSchedule(data, dbPlants, dbFertilizers);
   }
 
   // Local Storage Fallback
   const allSchedules = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
   allSchedules.push(newSchedule);
   saveLocalStorageData(SCHEDULES_KEY, allSchedules);
-  return enrichSchedule(newSchedule, dbPlants);
+  return enrichSchedule(newSchedule, dbPlants, DEFAULT_FERTILIZERS(user.id));
 };
 
 export const updateSchedule = async (id: string, updates: Partial<Schedule>): Promise<Schedule> => {
@@ -1867,6 +2013,7 @@ export const updateSchedule = async (id: string, updates: Partial<Schedule>): Pr
   if (!user) throw new Error("Not authenticated");
 
   const dbPlants = await getPlants(null, true);
+  const dbFertilizers = await getFertilizers(true);
 
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
@@ -1877,7 +2024,7 @@ export const updateSchedule = async (id: string, updates: Partial<Schedule>): Pr
       .select()
       .single();
     if (error) throw error;
-    return enrichSchedule(data, dbPlants);
+    return enrichSchedule(data, dbPlants, dbFertilizers);
   }
 
   // Local Storage Fallback
@@ -1888,7 +2035,7 @@ export const updateSchedule = async (id: string, updates: Partial<Schedule>): Pr
   const updated = { ...allSchedules[idx], ...updates };
   allSchedules[idx] = updated;
   saveLocalStorageData(SCHEDULES_KEY, allSchedules);
-  return enrichSchedule(updated, dbPlants);
+  return enrichSchedule(updated, dbPlants, DEFAULT_FERTILIZERS(user.id));
 };
 
 export const deleteSchedule = async (id: string): Promise<void> => {
@@ -1922,63 +2069,36 @@ export const performSchedule = async (
   if (!user) throw new Error("Not authenticated");
 
   // Fetch schedule
-  const schedules = await getSchedules();
+  const schedules = await getSchedules(null, true);
   const found = schedules.find(s => s.id === id);
   if (!found) throw new Error("Schedule not found");
 
-  // If this schedule is a "fertilizing" type, let's also write a FertilizerHistory record!
+  let targetFertId = fertilizerId || found.fertilizer_id;
+  let finalDetails = customDetails;
+
   if (found.type === "fertilizing") {
-    try {
-      let targetFertId = fertilizerId;
-      if (!targetFertId) {
-        const fertilizers = await getFertilizers();
-        if (fertilizers.length > 0) {
-          targetFertId = fertilizers[0].id;
-        } else {
-          // If no fertilizers exist, create a default one
-          const defaultFert = await createFertilizer({
-            name: "ปุ๋ยบำรุงทั่วไป",
-            npk_formula: "16-16-16",
-            type: "granular",
-            default_interval_days: 30,
-            color: "#10b981",
-            description: "ปุ๋ยบำรุงเม็ดทั่วไปที่สร้างขึ้นโดยอัตโนมัติ"
-          });
-          targetFertId = defaultFert.id;
-        }
+    if (!targetFertId) {
+      const fertilizers = await getFertilizers();
+      if (fertilizers.length > 0) {
+        targetFertId = fertilizers[0].id;
+      } else {
+        const defaultFert = await createFertilizer({
+          name: "ปุ๋ยบำรุงทั่วไป",
+          npk_formula: "16-16-16",
+          type: "granular",
+          default_interval_days: 30,
+          color: "#10b981",
+          description: "ปุ๋ยบำรุงเม็ดทั่วไปที่สร้างขึ้นโดยอัตโนมัติ"
+        });
+        targetFertId = defaultFert.id;
       }
+    }
 
-      const historyRecord: FertilizerHistory = {
-        id: crypto.randomUUID(),
-        user_id: user.id,
-        plant_id: found.plant_id,
-        fertilizer_id: targetFertId,
-        applied_date: dateStr,
-        amount: fertilizerAmount || "1/2 ช้อนชา",
-        note: customNotes || "บันทึกอัตโนมัติจากการติ๊กถูกงานประจำวันบน Dashboard",
-        created_at: new Date().toISOString(),
-      };
-
-      const allHistory = getLocalStorageData<FertilizerHistory>(FERTILIZER_HISTORY_KEY, []);
-      allHistory.push(historyRecord);
-      saveLocalStorageData(FERTILIZER_HISTORY_KEY, allHistory);
-
-      // Update matching plant fertilizer record if it exists
-      const allPF = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, []);
-      const pfIdx = allPF.findIndex(pf => pf.plant_id === found.plant_id && pf.fertilizer_id === targetFertId && pf.user_id === user.id);
-      if (pfIdx !== -1) {
-        const pf = allPF[pfIdx];
-        const nextDue = new Date(dateStr);
-        nextDue.setDate(nextDue.getDate() + pf.interval_days);
-        allPF[pfIdx] = {
-          ...pf,
-          last_applied_date: dateStr,
-          next_due_date: nextDue.toISOString(),
-        };
-        saveLocalStorageData(PLANT_FERTILIZERS_KEY, allPF);
-      }
-    } catch (err) {
-      console.warn("Failed to create fertilizer history during performSchedule:", err);
+    if (!finalDetails) {
+      const fertilizers = await getFertilizers(true);
+      const fertInfo = fertilizers.find(f => f.id === targetFertId);
+      const fertLabel = fertInfo ? `${fertInfo.name} (${fertInfo.npk_formula})` : "Fertilizer";
+      finalDetails = `ใส่ปุ๋ย: ${fertLabel}${fertilizerAmount ? ` — ${fertilizerAmount}` : ""}`;
     }
   }
 
@@ -1987,14 +2107,18 @@ export const performSchedule = async (
     plant_id: found.plant_id,
     type: found.type,
     date: dateStr,
-    details: customDetails || `Performed recurring scheduled task: ${found.type.charAt(0).toUpperCase() + found.type.slice(1)}`,
-    notes: customNotes || "Marked as completed from schedules planner."
+    details: finalDetails || `Performed recurring scheduled task: ${found.type.charAt(0).toUpperCase() + found.type.slice(1)}`,
+    notes: customNotes || "Marked as completed from schedules planner.",
+    fertilizer_id: found.type === "fertilizing" ? targetFertId : undefined,
+    fertilizer_amount: found.type === "fertilizing" ? fertilizerAmount : undefined,
   });
 
-  // Update last_performed
-  const updated = await updateSchedule(id, { last_performed: dateStr });
-  
-  // Re-queue notification check (can trigger a dynamic check later)
+  // Update schedule
+  const updated = await updateSchedule(found.id, {
+    last_performed: dateStr,
+    fertilizer_id: found.type === "fertilizing" ? targetFertId : undefined
+  });
+
   return updated;
 };
 
@@ -2093,7 +2217,10 @@ export const getNotifications = async (): Promise<Notification[]> => {
   return [...notifications, ...stored].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 };
 
-export const getWateringSchedules = async (plantId: string | null = null): Promise<Schedule[]> => {
+export const getWateringSchedules = async (
+  plantId: string | null = null,
+  includeArchived: boolean = false
+): Promise<Schedule[]> => {
   const user = await getCurrentUser();
   if (!user) return [];
 
@@ -2106,7 +2233,14 @@ export const getWateringSchedules = async (plantId: string | null = null): Promi
     const { data, error } = await query;
     if (error) throw error;
 
-    return (data || []).map(s => enrichSchedule(s, dbPlants));
+    let list = (data || []).map(s => enrichSchedule(s, dbPlants));
+    if (!plantId && !includeArchived) {
+      list = list.filter(s => {
+        const plant = dbPlants.find(p => p.id === s.plant_id);
+        return plant ? !plant.archived : false;
+      });
+    }
+    return list;
   }
 
   // Local Storage Fallback
@@ -2114,7 +2248,14 @@ export const getWateringSchedules = async (plantId: string | null = null): Promi
   let list = db.schedules.filter(s => s.type === "watering");
   if (plantId) list = list.filter(s => s.plant_id === plantId);
   
-  return list.map(s => enrichSchedule(s, dbPlants));
+  let enrichedList = list.map(s => enrichSchedule(s, dbPlants));
+  if (!plantId && !includeArchived) {
+    enrichedList = enrichedList.filter(s => {
+      const plant = dbPlants.find(p => p.id === s.plant_id);
+      return plant ? !plant.archived : false;
+    });
+  }
+  return enrichedList;
 };
 
 export const waterAllPlants = async (): Promise<{ success: boolean; affectedCount: number }> => {
@@ -2202,7 +2343,7 @@ export const waterAllPlants = async (): Promise<{ success: boolean; affectedCoun
   saveLocalStorageData(SCHEDULES_KEY, updatedSchedules);
 
   // Create bulk watering history in localStorage
-  const bulkHistory = getLocalStorageData<any>("plant_tracker_bulk_watering_history", []);
+  const bulkHistory = getLocalStorageData<{ id: string; user_id: string; watered_at: string; affected_plants_count: number; created_at: string }>("plant_tracker_bulk_watering_history", []);
   const newBulkHistoryItem = {
     id: crypto.randomUUID(),
     user_id: userId,
@@ -2355,34 +2496,24 @@ const DEFAULT_FERTILIZERS = (userId: string): Fertilizer[] => [
   },
 ];
 
-// Helper to compute PlantFertilizer next_due_date and task_status
-const enrichPlantFertilizer = (pf: PlantFertilizer, fertilizers: Fertilizer[], plants: Plant[]): PlantFertilizer => {
-  const fertilizer = fertilizers.find(f => f.id === pf.fertilizer_id);
-  const plant = plants.find(p => p.id === pf.plant_id);
-  let next_due_date: string | null = null;
-  let task_status: PlantFertilizer["task_status"] = "pending";
-
-  if (pf.last_applied_date) {
-    const next = new Date(pf.last_applied_date);
-    next.setDate(next.getDate() + pf.interval_days);
-    next_due_date = next.toISOString();
-    task_status = determineTaskStatus(next);
-  } else if (pf.created_at) {
-    const next = new Date(pf.created_at);
-    next.setDate(next.getDate() + pf.interval_days);
-    next_due_date = next.toISOString();
-    task_status = determineTaskStatus(next);
-  }
-
+// Helper to map Schedule to PlantFertilizer for UI compatibility
+const mapScheduleToPlantFertilizer = (s: Schedule): PlantFertilizer => {
   return {
-    ...pf,
-    next_due_date,
-    task_status,
-    fertilizer_name: fertilizer ? fertilizer.name : "Unknown Fertilizer",
-    fertilizer_npk: fertilizer ? fertilizer.npk_formula : "",
-    fertilizer_color: fertilizer ? fertilizer.color : "#10b981",
-    fertilizer_type: fertilizer ? fertilizer.type : "granular",
-    plant_name: plant ? plant.name : "Unknown Plant",
+    id: s.id,
+    user_id: s.user_id,
+    plant_id: s.plant_id,
+    fertilizer_id: s.fertilizer_id || "",
+    interval_days: s.interval_days,
+    last_applied_date: s.last_performed,
+    next_due_date: s.next_due_date || null,
+    active: true,
+    created_at: s.created_at,
+    fertilizer_name: s.fertilizer_name,
+    fertilizer_npk: s.fertilizer_npk,
+    fertilizer_color: s.fertilizer_color,
+    fertilizer_type: s.fertilizer_type,
+    plant_name: s.plant_name,
+    task_status: s.task_status as PlantFertilizer["task_status"],
   };
 };
 
@@ -2392,16 +2523,34 @@ export const getFertilizers = async (includeArchived = false): Promise<Fertilize
   const user = await getCurrentUser();
   if (!user) return [];
 
-  const all = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id))
-    .filter(f => f.user_id === user.id);
+  let all: Fertilizer[] = [];
 
-  // Compute usage_count per fertilizer
-  const plantFertilizers = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, [])
-    .filter(pf => pf.user_id === user.id);
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from("fertilizers")
+      .select("*")
+      .eq("user_id", user.id);
+    if (!error && data) {
+      all = data;
+    }
+  } else {
+    all = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id))
+      .filter(f => f.user_id === user.id);
+  }
+
+  // To compute usage_count, we query schedules of type 'fertilizing'
+  let schedList: Schedule[] = [];
+  if (isSupabaseConfigured && supabase) {
+    const { data } = await supabase.from("schedules").select("*").eq("user_id", user.id).eq("type", "fertilizing");
+    schedList = data || [];
+  } else {
+    const db = loadLocalDatabase(user.id);
+    schedList = db.schedules.filter(s => s.type === "fertilizing");
+  }
 
   const withCount = all.map(f => ({
     ...f,
-    usage_count: plantFertilizers.filter(pf => pf.fertilizer_id === f.id && pf.active).length,
+    usage_count: schedList.filter(s => s.fertilizer_id === f.id).length,
   }));
 
   return includeArchived ? withCount : withCount.filter(f => !f.is_archived);
@@ -2423,6 +2572,16 @@ export const createFertilizer = async (
     updated_at: now,
   };
 
+  if (isSupabaseConfigured && supabase) {
+    const { data: inserted, error } = await supabase
+      .from("fertilizers")
+      .insert(newFertilizer)
+      .select()
+      .single();
+    if (error) throw error;
+    return inserted;
+  }
+
   const all = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
   all.push(newFertilizer);
   saveLocalStorageData(FERTILIZERS_KEY, all);
@@ -2433,11 +2592,25 @@ export const updateFertilizer = async (id: string, updates: Partial<Fertilizer>)
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
+  const now = new Date().toISOString();
+
+  if (isSupabaseConfigured && supabase) {
+    const { data: updated, error } = await supabase
+      .from("fertilizers")
+      .update({ ...updates, updated_at: now })
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+    if (error) throw error;
+    return updated;
+  }
+
   const all = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
   const idx = all.findIndex(f => f.id === id && f.user_id === user.id);
   if (idx === -1) throw new Error("Fertilizer not found");
 
-  const updated = { ...all[idx], ...updates, updated_at: new Date().toISOString() };
+  const updated = { ...all[idx], ...updates, updated_at: now };
   all[idx] = updated;
   saveLocalStorageData(FERTILIZERS_KEY, all);
   return updated;
@@ -2451,6 +2624,16 @@ export const deleteFertilizer = async (id: string): Promise<void> => {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
+  if (isSupabaseConfigured && supabase) {
+    const { error } = await supabase
+      .from("fertilizers")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (error) throw error;
+    return;
+  }
+
   const all = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
   saveLocalStorageData(FERTILIZERS_KEY, all.filter(f => !(f.id === id && f.user_id === user.id)));
 };
@@ -2461,17 +2644,24 @@ export const getPlantFertilizers = async (plantId?: string): Promise<PlantFertil
   const user = await getCurrentUser();
   if (!user) return [];
 
-  const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id))
-    .filter(f => f.user_id === user.id);
+  let schedList: Schedule[] = [];
+  const dbPlants = await getPlants(null, true);
+  const dbFertilizers = await getFertilizers(true);
 
-  const dbPlants = getLocalStorageData<Plant>(PLANTS_KEY, []).filter(p => p.user_id === user.id);
+  if (isSupabaseConfigured && supabase) {
+    let query = supabase.from("schedules").select("*").eq("user_id", user.id).eq("type", "fertilizing");
+    if (plantId) query = query.eq("plant_id", plantId);
+    const { data, error } = await query;
+    if (error) throw error;
+    schedList = (data || []).map(s => enrichSchedule(s, dbPlants, dbFertilizers));
+  } else {
+    const db = loadLocalDatabase(user.id);
+    let list = db.schedules.filter(s => s.type === "fertilizing");
+    if (plantId) list = list.filter(s => s.plant_id === plantId);
+    schedList = list.map(s => enrichSchedule(s, dbPlants, db.fertilizers));
+  }
 
-  let list = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, [])
-    .filter(pf => pf.user_id === user.id && pf.active);
-
-  if (plantId) list = list.filter(pf => pf.plant_id === plantId);
-
-  return list.map(pf => enrichPlantFertilizer(pf, fertilizers, dbPlants));
+  return schedList.map(mapScheduleToPlantFertilizer);
 };
 
 export const createPlantFertilizer = async (
@@ -2480,103 +2670,92 @@ export const createPlantFertilizer = async (
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
-  const newPF: PlantFertilizer = {
+  const newSchedule: Schedule = {
     id: crypto.randomUUID(),
     user_id: user.id,
     plant_id: data.plant_id,
-    fertilizer_id: data.fertilizer_id,
+    type: "fertilizing",
     interval_days: data.interval_days,
-    last_applied_date: null,
-    next_due_date: null,
-    active: true,
+    start_date: new Date().toLocaleDateString("sv-SE"),
+    last_performed: null,
+    fertilizer_id: data.fertilizer_id,
     created_at: new Date().toISOString(),
   };
 
-  const all = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, []);
-  all.push(newPF);
-  saveLocalStorageData(PLANT_FERTILIZERS_KEY, all);
+  const dbPlants = await getPlants(null, true);
+  const dbFertilizers = await getFertilizers(true);
 
-  const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
-  const plants = getLocalStorageData<Plant>(PLANTS_KEY, []);
+  if (isSupabaseConfigured && supabase) {
+    const { data: inserted, error } = await supabase
+      .from("schedules")
+      .insert(newSchedule)
+      .select()
+      .single();
+    if (error) throw error;
+    return mapScheduleToPlantFertilizer(enrichSchedule(inserted, dbPlants, dbFertilizers));
+  }
 
-  // Also sync/create a generic fertilizing Schedule
-  await syncGenericFertilizingSchedule(data.plant_id, new Date().toISOString(), data.interval_days);
+  const allSchedules = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
+  allSchedules.push(newSchedule);
+  saveLocalStorageData(SCHEDULES_KEY, allSchedules);
 
-  return enrichPlantFertilizer(newPF, fertilizers, plants);
+  return mapScheduleToPlantFertilizer(enrichSchedule(newSchedule, dbPlants, DEFAULT_FERTILIZERS(user.id)));
 };
 
 export const updatePlantFertilizer = async (id: string, updates: Partial<PlantFertilizer>): Promise<PlantFertilizer> => {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
-  const all = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, []);
-  const idx = all.findIndex(pf => pf.id === id && pf.user_id === user.id);
-  if (idx === -1) throw new Error("PlantFertilizer not found");
+  const scheduleUpdates: Partial<Schedule> = {};
+  if (updates.interval_days !== undefined) scheduleUpdates.interval_days = updates.interval_days;
+  if (updates.last_applied_date !== undefined) scheduleUpdates.last_performed = updates.last_applied_date;
+  if (updates.fertilizer_id !== undefined) scheduleUpdates.fertilizer_id = updates.fertilizer_id;
 
-  const updated = { ...all[idx], ...updates };
-  all[idx] = updated;
-  saveLocalStorageData(PLANT_FERTILIZERS_KEY, all);
+  const dbPlants = await getPlants(null, true);
+  const dbFertilizers = await getFertilizers(true);
 
-  const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
-  const plants = getLocalStorageData<Plant>(PLANTS_KEY, []);
-  return enrichPlantFertilizer(updated, fertilizers, plants);
+  if (isSupabaseConfigured && supabase) {
+    const { data: updated, error } = await supabase
+      .from("schedules")
+      .update(scheduleUpdates)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+    if (error) throw error;
+    return mapScheduleToPlantFertilizer(enrichSchedule(updated, dbPlants, dbFertilizers));
+  }
+
+  const allSchedules = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
+  const idx = allSchedules.findIndex(s => s.id === id && s.user_id === user.id);
+  if (idx === -1) throw new Error("Schedule not found");
+
+  const updated = { ...allSchedules[idx], ...scheduleUpdates };
+  allSchedules[idx] = updated;
+  saveLocalStorageData(SCHEDULES_KEY, allSchedules);
+
+  return mapScheduleToPlantFertilizer(enrichSchedule(updated, dbPlants, DEFAULT_FERTILIZERS(user.id)));
 };
 
 export const deletePlantFertilizer = async (id: string): Promise<void> => {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
 
-  // Soft delete — set active = false to preserve history references
-  const all = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, []);
-  const idx = all.findIndex(pf => pf.id === id && pf.user_id === user.id);
-  if (idx !== -1) {
-    all[idx] = { ...all[idx], active: false };
-    saveLocalStorageData(PLANT_FERTILIZERS_KEY, all);
+  if (isSupabaseConfigured && supabase) {
+    const { error } = await supabase
+      .from("schedules")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (error) throw error;
+    return;
   }
+
+  const allSchedules = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
+  saveLocalStorageData(SCHEDULES_KEY, allSchedules.filter(s => !(s.id === id && s.user_id === user.id)));
 };
 
-// --- Apply Fertilizer (One-Click Workflow) ---
-const syncGenericFertilizingSchedule = async (plantId: string, appliedDate: string, intervalDays: number) => {
-  try {
-    const user = await getCurrentUser();
-    if (!user) return;
-    const schedules = await getSchedules(plantId);
-    const found = schedules.find(s => s.type === "fertilizing" && s.plant_id === plantId);
-    if (found) {
-      await updateSchedule(found.id, {
-        last_performed: appliedDate,
-        interval_days: intervalDays
-      });
-    } else {
-      // If it doesn't exist, we create a new generic Schedule of type "fertilizing"
-      const newSchedule: Schedule = {
-        id: crypto.randomUUID(),
-        user_id: user.id,
-        plant_id: plantId,
-        type: "fertilizing",
-        interval_days: intervalDays,
-        start_date: appliedDate.substring(0, 10), // YYYY-MM-DD
-        last_performed: appliedDate,
-        created_at: new Date().toISOString()
-      };
-
-      if (isSupabaseConfigured && supabase) {
-        const { error } = await supabase
-          .from("schedules")
-          .insert(newSchedule);
-        if (error) console.error("Failed to insert synced schedule in Supabase:", error);
-      } else {
-        const allSchedules = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
-        allSchedules.push(newSchedule);
-        saveLocalStorageData(SCHEDULES_KEY, allSchedules);
-      }
-    }
-  } catch (err) {
-    console.warn("Failed to sync generic fertilizing schedule:", err);
-  }
-};
-
-
+// --- Apply Fertilizer Workflow ---
 
 export const applyFertilizer = async (
   plantFertilizerId: string,
@@ -2597,62 +2776,52 @@ export const applyFertilizer = async (
     }
   }
 
-  // 1. Find PlantFertilizer record
-  const allPF = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, []);
-  const pfIdx = allPF.findIndex(pf => pf.id === plantFertilizerId && pf.user_id === user.id);
-  if (pfIdx === -1) throw new Error("Plant fertilizer schedule not found");
+  const dbPlants = await getPlants(null, true);
+  const dbFertilizers = await getFertilizers(true);
+  
+  let schedule: Schedule;
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from("schedules")
+      .select("*")
+      .eq("id", plantFertilizerId)
+      .single();
+    if (error) throw error;
+    schedule = data;
+  } else {
+    const db = loadLocalDatabase(user.id);
+    const found = db.schedules.find(s => s.id === plantFertilizerId);
+    if (!found) throw new Error("Schedule not found");
+    schedule = found;
+  }
 
-  const pf = allPF[pfIdx];
+  const updatedSchedule = await updateSchedule(schedule.id, { last_performed: applied_date });
 
-  // 2. Update last_applied_date
-  const nextDue = new Date(applied_date);
-  nextDue.setDate(nextDue.getDate() + pf.interval_days);
-  const updatedPF = {
-    ...pf,
-    last_applied_date: applied_date,
-    next_due_date: nextDue.toISOString(),
-  };
-  allPF[pfIdx] = updatedPF;
-  saveLocalStorageData(PLANT_FERTILIZERS_KEY, allPF);
-
-  // 3. Write FertilizerHistory record
-  const historyRecord: FertilizerHistory = {
-    id: crypto.randomUUID(),
-    user_id: user.id,
-    plant_id: pf.plant_id,
-    fertilizer_id: pf.fertilizer_id,
-    applied_date,
-    amount,
-    note,
-    created_at: new Date().toISOString(),
-  };
-  const allHistory = getLocalStorageData<FertilizerHistory>(FERTILIZER_HISTORY_KEY, []);
-  allHistory.push(historyRecord);
-  saveLocalStorageData(FERTILIZER_HISTORY_KEY, allHistory);
-
-  // 4. Also write to Activities log so Calendar/Dashboard timeline stays populated
-  const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
-  const fertInfo = fertilizers.find(f => f.id === pf.fertilizer_id);
+  const fertInfo = dbFertilizers.find(f => f.id === schedule.fertilizer_id);
   const fertLabel = fertInfo ? `${fertInfo.name} (${fertInfo.npk_formula})` : "Fertilizer";
 
-  await createActivity({
-    plant_id: pf.plant_id,
+  const newActivity = await createActivity({
+    plant_id: schedule.plant_id,
     type: "fertilizing",
     date: applied_date,
     details: `ใส่ปุ๋ย: ${fertLabel}${amount ? ` — ${amount}` : ""}`,
     notes: note,
+    fertilizer_id: schedule.fertilizer_id,
+    fertilizer_amount: amount,
   });
 
-  // Sync generic schedule if it exists
-  await syncGenericFertilizingSchedule(pf.plant_id, applied_date, pf.interval_days);
-
-  // 5. Return enriched result
-  const plants = getLocalStorageData<Plant>(PLANTS_KEY, []);
-  const enrichedPF = enrichPlantFertilizer(updatedPF, fertilizers, plants);
-
-  const plant = plants.find(p => p.id === pf.plant_id);
+  const enrichedPF = mapScheduleToPlantFertilizer(enrichSchedule(updatedSchedule, dbPlants, dbFertilizers));
+  
+  const plant = dbPlants.find(p => p.id === schedule.plant_id);
   const enrichedHistory: FertilizerHistory = {
-    ...historyRecord,
+    id: newActivity.id,
+    user_id: user.id,
+    plant_id: schedule.plant_id,
+    fertilizer_id: schedule.fertilizer_id || "",
+    applied_date: applied_date,
+    amount: amount,
+    note: note,
+    created_at: newActivity.created_at,
     plant_name: plant ? plant.name : "Unknown Plant",
     fertilizer_name: fertInfo ? fertInfo.name : "Unknown",
     fertilizer_npk: fertInfo ? fertInfo.npk_formula : "",
@@ -2682,58 +2851,50 @@ export const logFertilizationDirect = async (
     }
   }
 
-  // 1. Write FertilizerHistory record
-  const historyRecord: FertilizerHistory = {
-    id: crypto.randomUUID(),
-    user_id: user.id,
-    plant_id: plantId,
-    fertilizer_id: fertilizerId,
-    applied_date,
-    amount,
-    note,
-    created_at: new Date().toISOString(),
-  };
-  const allHistory = getLocalStorageData<FertilizerHistory>(FERTILIZER_HISTORY_KEY, []);
-  allHistory.push(historyRecord);
-  saveLocalStorageData(FERTILIZER_HISTORY_KEY, allHistory);
-
-  // Update matching plant fertilizer record if it exists
-  const allPF = getLocalStorageData<PlantFertilizer>(PLANT_FERTILIZERS_KEY, []);
-  const pfIdx = allPF.findIndex(pf => pf.plant_id === plantId && pf.fertilizer_id === fertilizerId && pf.user_id === user.id);
-  if (pfIdx !== -1) {
-    const pf = allPF[pfIdx];
-    const nextDue = new Date(applied_date);
-    nextDue.setDate(nextDue.getDate() + pf.interval_days);
-    allPF[pfIdx] = {
-      ...pf,
-      last_applied_date: applied_date,
-      next_due_date: nextDue.toISOString(),
-    };
-    saveLocalStorageData(PLANT_FERTILIZERS_KEY, allPF);
-  }
-
-  // 2. Also write to Activities log so Calendar/Dashboard timeline stays populated
-  const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id));
-  const fertInfo = fertilizers.find(f => f.id === fertilizerId);
+  const dbPlants = await getPlants(null, true);
+  const dbFertilizers = await getFertilizers(true);
+  const fertInfo = dbFertilizers.find(f => f.id === fertilizerId);
   const fertLabel = fertInfo ? `${fertInfo.name} (${fertInfo.npk_formula})` : "Fertilizer";
-  const intervalDays = fertInfo ? fertInfo.default_interval_days : 30;
 
-  await createActivity({
+  const newActivity = await createActivity({
     plant_id: plantId,
     type: "fertilizing",
     date: applied_date,
     details: `ใส่ปุ๋ย: ${fertLabel}${amount ? ` — ${amount}` : ""}`,
     notes: note,
+    fertilizer_id: fertilizerId,
+    fertilizer_amount: amount,
   });
 
-  // Update generic fertilizing schedule if it exists
-  await syncGenericFertilizingSchedule(plantId, applied_date, intervalDays);
+  let scheduleToUpdate: Schedule | null = null;
+  if (isSupabaseConfigured && supabase) {
+    const { data } = await supabase
+      .from("schedules")
+      .select("*")
+      .eq("plant_id", plantId)
+      .eq("fertilizer_id", fertilizerId)
+      .eq("type", "fertilizing");
+    if (data && data.length > 0) scheduleToUpdate = data[0];
+  } else {
+    const db = loadLocalDatabase(user.id);
+    const found = db.schedules.find(s => s.plant_id === plantId && s.fertilizer_id === fertilizerId && s.type === "fertilizing");
+    if (found) scheduleToUpdate = found;
+  }
 
-  const plants = getLocalStorageData<Plant>(PLANTS_KEY, []);
-  const plant = plants.find(p => p.id === plantId);
+  if (scheduleToUpdate) {
+    await updateSchedule(scheduleToUpdate.id, { last_performed: applied_date });
+  }
 
+  const plant = dbPlants.find(p => p.id === plantId);
   return {
-    ...historyRecord,
+    id: newActivity.id,
+    user_id: user.id,
+    plant_id: plantId,
+    fertilizer_id: fertilizerId,
+    applied_date: applied_date,
+    amount: amount,
+    note: note,
+    created_at: newActivity.created_at,
     plant_name: plant ? plant.name : "Unknown Plant",
     fertilizer_name: fertInfo ? fertInfo.name : "Unknown",
     fertilizer_npk: fertInfo ? fertInfo.npk_formula : "",
@@ -2741,44 +2902,54 @@ export const logFertilizationDirect = async (
   };
 };
 
-// --- Fertilizer History ---
-
 export const getFertilizerHistory = async (
   plantId?: string,
-  fertilizerId?: string,
-  limit?: number
+  limit?: number,
+  maxResults = 20
 ): Promise<FertilizerHistory[]> => {
   const user = await getCurrentUser();
   if (!user) return [];
 
-  const fertilizers = getLocalStorageData<Fertilizer>(FERTILIZERS_KEY, DEFAULT_FERTILIZERS(user.id))
-    .filter(f => f.user_id === user.id);
-  const plants = getLocalStorageData<Plant>(PLANTS_KEY, []).filter(p => p.user_id === user.id);
+  let actList: Activity[] = [];
+  if (isSupabaseConfigured && supabase) {
+    let query = supabase.from("activities").select("*").eq("user_id", user.id).eq("type", "fertilizing");
+    if (plantId) query = query.eq("plant_id", plantId);
+    query = query.order("date", { ascending: false });
+    if (limit || maxResults) query = query.limit(limit || maxResults);
+    const { data, error } = await query;
+    if (!error && data) actList = data;
+  } else {
+    const db = loadLocalDatabase(user.id);
+    let list = db.activities.filter(a => a.type === "fertilizing");
+    if (plantId) list = list.filter(a => a.plant_id === plantId);
+    list = list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    if (limit || maxResults) list = list.slice(0, limit || maxResults);
+    actList = list;
+  }
 
-  let list = getLocalStorageData<FertilizerHistory>(FERTILIZER_HISTORY_KEY, [])
-    .filter(h => h.user_id === user.id);
+  const dbPlants = await getPlants(null, true);
+  const dbFertilizers = await getFertilizers(true);
 
-  if (plantId) list = list.filter(h => h.plant_id === plantId);
-  if (fertilizerId) list = list.filter(h => h.fertilizer_id === fertilizerId);
-
-  // Sort descending by applied_date
-  list.sort((a, b) => new Date(b.applied_date).getTime() - new Date(a.applied_date).getTime());
-  if (limit) list = list.slice(0, limit);
-
-  return list.map(h => {
-    const fertilizer = fertilizers.find(f => f.id === h.fertilizer_id);
-    const plant = plants.find(p => p.id === h.plant_id);
+  return actList.map(a => {
+    const plant = dbPlants.find(p => p.id === a.plant_id);
+    const fertInfo = dbFertilizers.find(f => f.id === a.fertilizer_id);
     return {
-      ...h,
+      id: a.id,
+      user_id: a.user_id,
+      plant_id: a.plant_id,
+      fertilizer_id: a.fertilizer_id || "",
+      applied_date: a.date,
+      amount: a.fertilizer_amount || "",
+      note: a.notes,
+      created_at: a.created_at,
       plant_name: plant ? plant.name : "Unknown Plant",
-      fertilizer_name: fertilizer ? fertilizer.name : "Unknown",
-      fertilizer_npk: fertilizer ? fertilizer.npk_formula : "",
-      fertilizer_color: fertilizer ? fertilizer.color : "#10b981",
+      fertilizer_name: fertInfo ? fertInfo.name : "Unknown",
+      fertilizer_npk: fertInfo ? fertInfo.npk_formula : "",
+      fertilizer_color: fertInfo ? fertInfo.color : "#10b981",
     };
   });
 };
 
-// Helper: get all active plant-fertilizer schedules as a flat list (for dashboard task cards)
 export const getAllFertilizerScheduleTasks = async (): Promise<PlantFertilizer[]> => {
   return getPlantFertilizers();
 };
@@ -2797,12 +2968,14 @@ export const importSampleDataToSupabase = async (): Promise<{ success: boolean; 
     // 1. Get default mock data
     const mockGardens = DEFAULT_GARDENS(userId);
     const mockPlants = DEFAULT_PLANTS(userId);
+    const mockFertilizers = DEFAULT_FERTILIZERS(userId);
     const mockActivities = DEFAULT_ACTIVITIES(userId);
     const mockSchedules = DEFAULT_SCHEDULES(userId);
 
     // 2. Maps to store UUID mappings
     const gardenIdMap: Record<string, string> = {};
     const plantIdMap: Record<string, string> = {};
+    const fertilizerIdMap: Record<string, string> = {};
 
     // 3. Import Gardens
     const gardensToInsert = mockGardens.map(g => {
@@ -2821,7 +2994,29 @@ export const importSampleDataToSupabase = async (): Promise<{ success: boolean; 
     const { error: gError } = await supabase.from("gardens").insert(gardensToInsert);
     if (gError) throw gError;
 
-    // 4. Import Plants
+    // 4. Import Fertilizers
+    const fertilizersToInsert = mockFertilizers.map(f => {
+      const newUuid = crypto.randomUUID();
+      fertilizerIdMap[f.id] = newUuid;
+      return {
+        id: newUuid,
+        user_id: userId,
+        name: f.name,
+        npk_formula: f.npk_formula || "",
+        type: f.type,
+        default_interval_days: f.default_interval_days,
+        color: f.color || "",
+        description: f.description || "",
+        is_archived: f.is_archived || false,
+        created_at: f.created_at || new Date().toISOString(),
+        updated_at: f.updated_at || new Date().toISOString()
+      };
+    });
+
+    const { error: fError } = await supabase.from("fertilizers").insert(fertilizersToInsert);
+    if (fError) throw fError;
+
+    // 5. Import Plants
     const plantsToInsert = mockPlants.map(p => {
       const newUuid = crypto.randomUUID();
       plantIdMap[p.id] = newUuid;
@@ -2844,7 +3039,7 @@ export const importSampleDataToSupabase = async (): Promise<{ success: boolean; 
     const { error: pError } = await supabase.from("plants").insert(plantsToInsert);
     if (pError) throw pError;
 
-    // 5. Import Schedules
+    // 6. Import Schedules
     const schedulesToInsert = mockSchedules.map(s => {
       if (s.type === "watering") return null;
       const mappedPlantId = plantIdMap[s.plant_id];
@@ -2857,6 +3052,7 @@ export const importSampleDataToSupabase = async (): Promise<{ success: boolean; 
         interval_days: s.interval_days,
         start_date: s.start_date,
         last_performed: s.last_performed || null,
+        fertilizer_id: s.fertilizer_id ? fertilizerIdMap[s.fertilizer_id] || null : null,
         created_at: s.created_at || new Date().toISOString()
       };
     }).filter((s): s is NonNullable<typeof s> => !!s);
@@ -2866,7 +3062,7 @@ export const importSampleDataToSupabase = async (): Promise<{ success: boolean; 
       if (sError) throw sError;
     }
 
-    // 6. Import Activities
+    // 7. Import Activities
     const activitiesToInsert = mockActivities.map(a => {
       if (a.type === "watering") return null;
       const mappedPlantId = plantIdMap[a.plant_id];
@@ -2880,6 +3076,8 @@ export const importSampleDataToSupabase = async (): Promise<{ success: boolean; 
         details: a.details || "",
         notes: a.notes || "",
         photo_url: null,
+        fertilizer_id: a.fertilizer_id ? fertilizerIdMap[a.fertilizer_id] || null : null,
+        fertilizer_amount: a.fertilizer_amount || null,
         created_at: a.created_at || new Date().toISOString()
       };
     }).filter((a): a is NonNullable<typeof a> => !!a);
@@ -2890,9 +3088,9 @@ export const importSampleDataToSupabase = async (): Promise<{ success: boolean; 
     }
 
     return { success: true, error: null };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to seed Supabase:", err);
-    return { success: false, error: err };
+    return { success: false, error: err as Error };
   }
 };
 

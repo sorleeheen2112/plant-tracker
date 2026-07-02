@@ -525,6 +525,10 @@ export default function DashboardPage() {
     .filter(s => s.task_status === "upcoming")
     .sort((a, b) => new Date(a.next_due_date!).getTime() - new Date(b.next_due_date!).getTime());
 
+  const sortedOverdueTasks = [...overdueTasks].sort(
+    (a, b) => new Date(a.next_due_date!).getTime() - new Date(b.next_due_date!).getTime()
+  );
+
   // Recent timeline (last 4 activities)
   const recentActivities = activities.slice(0, 4);
 
@@ -633,6 +637,80 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* COLUMN 1: TASKS & HISTORY (2/3 WIDTH) */}
           <div className="lg:col-span-2 space-y-6">
+            {/* OVERDUE TASKS (FORGOT TO DO) */}
+            {overdueCount > 0 && (
+              <div className="bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900/50 rounded-xl shadow-xs overflow-hidden">
+                <div className="px-6 py-5 border-b border-rose-100 dark:border-rose-900/40 flex items-center justify-between bg-rose-50/10 dark:bg-rose-950/5">
+                  <h2 className="text-sm font-bold text-rose-800 dark:text-rose-455 flex items-center gap-2">
+                    <AlertTriangle className="h-4.5 w-4.5 text-rose-600 animate-pulse" />
+                    {t("dashboard.overdueTasksBox")}
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold text-white bg-rose-600 rounded-full">
+                      {overdueCount}
+                    </span>
+                  </h2>
+                </div>
+                
+                <div className="p-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {sortedOverdueTasks.map((task) => {
+                      const { icon: IconComponent, bgClass, textClass } = getActivityConfig(task.type);
+                      return (
+                        <div
+                          key={task.id}
+                          className="flex items-center justify-between gap-3 p-4 border border-rose-100 dark:border-rose-900/30 rounded-xl bg-white dark:bg-zinc-900/50 shadow-xs hover:border-rose-500/50 hover:shadow-sm transition-all duration-200"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {/* Plant Cover Image or Activity Icon Fallback */}
+                            {task.plant_cover_image ? (
+                              <img
+                                src={task.plant_cover_image}
+                                alt={task.plant_name}
+                                className="h-10 w-10 shrink-0 rounded-xl object-cover bg-zinc-100 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700/50"
+                              />
+                            ) : (
+                              <div className={`h-10 w-10 shrink-0 flex items-center justify-center rounded-xl ${bgClass} transition-colors`}>
+                                <IconComponent className={`h-5 w-5 ${textClass}`} />
+                              </div>
+                            )}
+                            {/* Plant and Task Details */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-col">
+                                <button
+                                  onClick={() => router.push(`/plants?id=${task.plant_id}`)}
+                                  className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100 hover:text-rose-600 dark:hover:text-rose-400 hover:underline transition-colors cursor-pointer truncate text-left leading-tight"
+                                >
+                                  {task.plant_name}
+                                </button>
+                                <span className="text-xs font-bold text-zinc-400 dark:text-zinc-500 mt-0.5">
+                                  {t(`activities.${task.type}`)}
+                                </span>
+                                <span className="w-fit mt-1 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/20 border border-rose-100/50 dark:border-rose-900/30 rounded">
+                                  {t("dashboard.overdueDaysCount", { days: task.overdue_days || 1 })}
+                                </span>
+                                {task.type === "fertilizing" && task.last_fertilizer && (
+                                  <p className="text-[10px] font-bold text-amber-600 dark:text-amber-500 mt-1 truncate" title={task.last_fertilizer}>
+                                    🧪 {language === "th" ? `ปุ๋ยล่าสุด: ${task.last_fertilizer}` : `Last: ${task.last_fertilizer}`}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          {/* Circle Mark Completed Button */}
+                          <button
+                            onClick={() => handleCompleteTask(task)}
+                            className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-600 dark:bg-rose-950/20 dark:hover:bg-rose-700 text-rose-600 hover:text-white dark:text-rose-400 transition-all duration-150 cursor-pointer shadow-xs"
+                            title={t("schedules.markCompleted")}
+                          >
+                            <Check className="h-4.5 w-4.5 stroke-[3]" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* TODAY'S TASKS */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xs overflow-hidden">
               <div className="px-6 py-5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/25 dark:bg-zinc-900/50">

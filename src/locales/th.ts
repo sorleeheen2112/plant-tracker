@@ -76,6 +76,8 @@ export const th: TranslationType = {
     activitiesMonth: "กิจกรรมเดือนนี้",
     todaysTasks: "งานประจำวันนี้",
     upcomingTasks: "งานถัดไป (7 วันข้างหน้า)",
+    overdueTasksBox: "งานที่ลืมทำ (ค้างคา)",
+    overdueDaysCount: "เลยกำหนด {days} วัน",
     recentActivities: "กิจกรรมดูแลล่าสุด",
     plantHealthOverview: "ภาพรวมสุขภาพต้นไม้",
     monthlyActivityChart: "กิจกรรมการดูแลรายเดือน",
