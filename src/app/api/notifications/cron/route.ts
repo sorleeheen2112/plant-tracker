@@ -33,23 +33,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, message: "No users connected to LINE" });
     }
 
-    const todayLocal = new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD
-    const startOfToday = `${todayLocal}T00:00:00.000Z`;
+    const ninetyMinutesAgo = new Date(Date.now() - 90 * 60 * 1000).toISOString();
 
     let sentCount = 0;
 
     for (const profile of connectedProfiles) {
       const userId = profile.id;
 
-      // 2. Fetch existing logs for today to prevent duplicate sends
-      const { data: todayLogs } = await dbClient
+      // 2. Fetch existing logs in the last 90 minutes to prevent duplicate sends on the same run
+      const { data: recentLogs } = await dbClient
         .from("notification_logs")
         .select("*")
         .eq("user_id", userId)
         .eq("status", "success")
-        .gte("created_at", startOfToday);
+        .gte("created_at", ninetyMinutesAgo);
 
-      const sentTypes = new Set(todayLogs?.map(l => l.notification_type) || []);
+      const sentTypes = new Set(recentLogs?.map(l => l.notification_type) || []);
 
       // 3. Check schedules for due/overdue items
       const { data: schedules } = await dbClient

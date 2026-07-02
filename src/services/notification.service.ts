@@ -36,9 +36,10 @@ export const triggerLineNotification = async (
       return { success: false, reason: "LINE not connected" };
     }
 
-    // 2. Check preferences
-    const prefs = profile.notification_preferences || { watering: true, fertilizer: true, plantHealth: true };
-    if (!prefs[type]) {
+    // 2. Check preferences (Default to true if the key is undefined or missing)
+    const prefs = profile.notification_preferences || {};
+    const isEnabled = prefs[type] !== false;
+    if (!isEnabled) {
       return { success: false, reason: "Notification type disabled in preferences" };
     }
 
