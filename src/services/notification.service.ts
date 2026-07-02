@@ -1,5 +1,5 @@
 import { sendText } from "./line.service";
-import { isSupabaseConfigured, supabase } from "./supabase";
+import { isSupabaseConfigured, supabase, getSupabaseAdminClient } from "./supabase";
 
 export type NotificationType = "watering" | "fertilizer" | "plantHealth";
 
@@ -11,8 +11,9 @@ export const triggerLineNotification = async (
   let profile: any = null;
   try {
     // 1. Get user profile to check connection and preferences
-    if (isSupabaseConfigured && supabase) {
-      const { data } = await supabase
+    const dbClient = getSupabaseAdminClient() || supabase;
+    if (isSupabaseConfigured && dbClient) {
+      const { data } = await dbClient
         .from("profiles")
         .select("*")
         .eq("id", userId)
@@ -85,8 +86,9 @@ const logNotificationAttempt = async (log: {
   response_code?: number;
   error_message?: string;
 }) => {
-  if (isSupabaseConfigured && supabase) {
-    await supabase.from("notification_logs").insert({
+  const dbClient = getSupabaseAdminClient() || supabase;
+  if (isSupabaseConfigured && dbClient) {
+    await dbClient.from("notification_logs").insert({
       user_id: log.user_id,
       line_user_id: log.line_user_id,
       notification_type: log.notification_type,
