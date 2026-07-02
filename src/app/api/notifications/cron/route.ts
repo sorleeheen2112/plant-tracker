@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isSupabaseConfigured, supabase } from "@/services/supabase";
+import { isSupabaseConfigured, supabase, getSupabaseAdminClient } from "@/services/supabase";
 import { triggerLineNotification } from "@/services/notification.service";
 
 export async function GET(request: Request) {
@@ -12,13 +12,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isSupabaseConfigured || !supabase) {
+  if (!isSupabaseConfigured) {
     return NextResponse.json({ success: false, reason: "Supabase not configured" });
+  }
+
+  const dbClient = getSupabaseAdminClient() || supabase;
+  if (!dbClient) {
+    return NextResponse.json({ success: false, reason: "Database client not available" });
   }
 
   try {
     // 1. Get all connected LINE users
-    const { data: connectedProfiles, error: profError } = await supabase
+    const { data: connectedProfiles, error: profError } = await dbClient
       .from("profiles")
       .select("*")
       .eq("line_connected", true);
@@ -37,7 +42,7 @@ export async function GET(request: Request) {
       const userId = profile.id;
 
       // 2. Fetch existing logs for today to prevent duplicate sends
-      const { data: todayLogs } = await supabase
+      const { data: todayLogs } = await dbClient
         .from("notification_logs")
         .select("*")
         .eq("user_id", userId)
@@ -47,7 +52,7 @@ export async function GET(request: Request) {
       const sentTypes = new Set(todayLogs?.map(l => l.notification_type) || []);
 
       // 3. Check schedules for due/overdue items
-      const { data: schedules } = await supabase
+      const { data: schedules } = await dbClient
         .from("schedules")
         .select("*, plants:plant_id(name, archived)")
         .eq("user_id", userId);

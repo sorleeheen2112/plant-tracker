@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isSupabaseConfigured, supabase } from "@/services/supabase";
+import { isSupabaseConfigured, supabase, getSupabaseAdminClient } from "@/services/supabase";
 import { getUserFromRequest } from "./helper";
 
 // GET CONNECTION STATUS
@@ -11,8 +11,13 @@ export async function GET(request: Request) {
 
   const isMock = !!request.headers.get("x-mock-user-id");
 
-  if (isSupabaseConfigured && supabase && !isMock) {
-    const { data, error } = await supabase
+  if (isSupabaseConfigured && !isMock) {
+    const adminClient = getSupabaseAdminClient() || supabase;
+    if (!adminClient) {
+      return NextResponse.json({ connected: false });
+    }
+
+    const { data, error } = await adminClient
       .from("profiles")
       .select("*")
       .eq("id", user.id)
@@ -69,8 +74,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Preferences payload required" }, { status: 400 });
     }
 
-    if (isSupabaseConfigured && supabase && !isMock) {
-      const { error } = await supabase
+    if (isSupabaseConfigured && !isMock) {
+      const adminClient = getSupabaseAdminClient() || supabase;
+      if (!adminClient) throw new Error("Database client not available");
+
+      const { error } = await adminClient
         .from("profiles")
         .update({ notification_preferences: preferences })
         .eq("id", user.id);
@@ -94,8 +102,13 @@ export async function DELETE(request: Request) {
 
   const isMock = !!request.headers.get("x-mock-user-id");
 
-  if (isSupabaseConfigured && supabase && !isMock) {
-    const { error } = await supabase
+  if (isSupabaseConfigured && !isMock) {
+    const adminClient = getSupabaseAdminClient() || supabase;
+    if (!adminClient) {
+      return NextResponse.json({ error: "Database client not available" }, { status: 500 });
+    }
+
+    const { error } = await adminClient
       .from("profiles")
       .update({
         line_connected: false,
