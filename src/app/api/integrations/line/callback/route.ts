@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { isSupabaseConfigured, supabase } from "@/services/supabase";
+import { isSupabaseConfigured, supabase, getSupabaseAdminClient } from "@/services/supabase";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -92,9 +92,12 @@ export async function GET(request: Request) {
     const { userId: lineUserId, displayName, pictureUrl } = profileData;
 
     // 5. Update profile table
-    if (isSupabaseConfigured && supabase && !isMock) {
+    if (isSupabaseConfigured && !isMock) {
+      const adminClient = getSupabaseAdminClient() || supabase;
+      if (!adminClient) throw new Error("Database client not available");
+
       // Check if this LINE account is already linked to another user
-      const { data: existingUser } = await supabase
+      const { data: existingUser } = await adminClient
         .from("profiles")
         .select("id")
         .eq("line_user_id", lineUserId)
@@ -105,7 +108,7 @@ export async function GET(request: Request) {
         return redirectWithError("This LINE account is already connected to another Plant Tracker user.");
       }
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await adminClient
         .from("profiles")
         .update({
           line_user_id: lineUserId,
