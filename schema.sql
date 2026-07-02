@@ -13,6 +13,12 @@ create table public.profiles (
   avatar_url text,
   language text default 'en' check (language in ('en', 'th')) not null,
   theme text default 'system' check (theme in ('light', 'dark', 'system')) not null,
+  line_user_id text,
+  line_display_name text,
+  line_picture_url text,
+  line_connected boolean default false not null,
+  line_connected_at timestamp with time zone,
+  notification_preferences jsonb default '{"watering": true, "fertilizer": true, "plantHealth": true}'::jsonb not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -207,3 +213,23 @@ alter table public.bulk_watering_history enable row level security;
 -- Policies for Bulk Watering History
 create policy "Allow all bulk watering history for owners" on public.bulk_watering_history
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+
+-- 9. NOTIFICATION LOGS TABLE
+create table public.notification_logs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  line_user_id text,
+  notification_type text not null, -- 'watering', 'fertilizer', 'plantHealth'
+  status text not null,            -- 'success', 'failed'
+  response_code integer,
+  error_message text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS for Notification Logs
+alter table public.notification_logs enable row level security;
+
+-- Policies for Notification Logs
+create policy "Allow owners to read their own notification logs" on public.notification_logs
+  for select using (auth.uid() = user_id);

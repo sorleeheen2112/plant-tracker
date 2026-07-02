@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { getCurrentUser } from "./auth";
+import { triggerLineNotification } from "./notification.service";
 
 // --- Types ---
 export interface Garden {
@@ -1667,6 +1668,21 @@ export const createPlant = async (plant: Omit<Plant, "id" | "user_id" | "archive
 export const updatePlant = async (id: string, updates: Partial<Plant>): Promise<Plant> => {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not authenticated");
+
+  if (updates.status === "sick") {
+    // Trigger plant health alert asynchronously
+    (async () => {
+      try {
+        const plants = await getPlants(null, true);
+        const plant = plants.find(p => p.id === id);
+        const plantName = plant ? plant.name : updates.name || "พืชของคุณ";
+        const msg = `🍂 Plant Tracker\n\nพบปัญหาความแข็งแรงของพืช "${plantName}" ของคุณ\n\nกรุณาเปิดแอป Plant Tracker เพื่อตรวจสอบคำแนะนำการดูแลครับ`;
+        await triggerLineNotification(user.id, "plantHealth", msg);
+      } catch (err) {
+        console.error("Failed to trigger plant health notification:", err);
+      }
+    })();
+  }
 
   const enrichedUpdates = {
     ...updates,

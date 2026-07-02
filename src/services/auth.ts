@@ -7,6 +7,12 @@ export interface UserProfile {
   avatar_url?: string;
   language: "en" | "th";
   theme: "light" | "dark" | "system";
+  line_user_id?: string;
+  line_display_name?: string;
+  line_picture_url?: string;
+  line_connected?: boolean;
+  line_connected_at?: string;
+  notification_preferences?: { watering: boolean; fertilizer: boolean; plantHealth: boolean };
   created_at: string;
 }
 

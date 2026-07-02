@@ -8,6 +8,7 @@ import { useToast } from "@/context/ToastContext";
 import { useTheme } from "@/context/ThemeContext";
 import { Settings, User, Globe, Moon, Save, Languages } from "lucide-react";
 import { ImageUploadInput } from "@/components/ui/ImageUploadInput";
+import { supabase, isSupabaseConfigured } from "@/services/supabase";
 
 const BANGKOK_DISTRICTS = [
   { nameTh: "จตุจักร (Chatuchak)", nameEn: "Chatuchak", lat: 13.8099, lng: 100.5616 },
@@ -43,6 +44,15 @@ export default function SettingsPage() {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
 
+  // LINE Connection state
+  const [lineConnected, setLineConnected] = useState(false);
+  const [lineDisplayName, setLineDisplayName] = useState("");
+  const [linePictureUrl, setLinePictureUrl] = useState("");
+  const [lineConnectedAt, setLineConnectedAt] = useState("");
+  const [linePrefs, setLinePrefs] = useState({ watering: true, fertilizer: true, plantHealth: true });
+  const [loadingLine, setLoadingLine] = useState(true);
+  const [updatingLinePrefs, setUpdatingLinePrefs] = useState(false);
+
   // Sync state values on user mount
   useEffect(() => {
     if (user) {
@@ -63,6 +73,206 @@ export default function SettingsPage() {
       setSelectedDistrict(storedDistrict);
     }
   }, [user]);
+
+  // Load LINE Connection Status
+  useEffect(() => {
+    // Sync mock cookies to localStorage on mount for fallback testing
+    if (typeof window !== "undefined") {
+      const getCookie = (name: string) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop()?.split(";").shift();
+        return null;
+      };
+
+      const mockConnected = getCookie("mock_line_connected");
+      if (mockConnected === "true") {
+        localStorage.setItem("mock_line_connected", "true");
+        const mockName = getCookie("mock_line_display_name");
+        if (mockName) localStorage.setItem("mock_line_display_name", decodeURIComponent(mockName));
+        const mockPic = getCookie("mock_line_picture_url");
+        if (mockPic) localStorage.setItem("mock_line_picture_url", decodeURIComponent(mockPic));
+        
+        // Clear mock cookies
+        document.cookie = "mock_line_connected=; Max-Age=0; path=/;";
+        document.cookie = "mock_line_display_name=; Max-Age=0; path=/;";
+        document.cookie = "mock_line_picture_url=; Max-Age=0; path=/;";
+      }
+    }
+
+    const fetchLineStatus = async () => {
+      if (!user) return;
+      try {
+        setLoadingLine(true);
+        let headers: Record<string, string> = { "Content-Type": "application/json" };
+        let session = null;
+        if (isSupabaseConfigured && supabase) {
+          const sessionResult = await supabase.auth.getSession();
+          session = sessionResult.data.session;
+        }
+
+        if (session) {
+          headers["Authorization"] = `Bearer ${session.access_token}`;
+        } else {
+          headers["x-mock-user-id"] = user.id;
+          headers["x-mock-line-connected"] = localStorage.getItem("mock_line_connected") || "false";
+          headers["x-mock-line-preferences"] = localStorage.getItem("mock_line_preferences") || JSON.stringify({ watering: true, fertilizer: true, plantHealth: true });
+        }
+
+        const res = await fetch("/api/integrations/line", { headers });
+        if (res.ok) {
+          const data = await res.json();
+          setLineConnected(data.connected);
+          setLineDisplayName(data.displayName || "");
+          setLinePictureUrl(data.pictureUrl || "");
+          setLineConnectedAt(data.connectedAt || "");
+          setLinePrefs(data.preferences || { watering: true, fertilizer: true, plantHealth: true });
+        }
+      } catch (err) {
+        console.error("Failed to fetch LINE status:", err);
+      } finally {
+        setLoadingLine(false);
+      }
+    };
+
+    fetchLineStatus();
+  }, [user]);
+
+  // Check URL params for connection feedback (toasts)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const lineStatus = params.get("line");
+      if (lineStatus === "connected") {
+        toast(t("settings.lineConnectSuccess"), "success");
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (lineStatus === "error") {
+        const msg = params.get("msg") || "Failed to connect LINE";
+        toast(msg, "error");
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, [language, toast, t]);
+
+  const handleConnectLine = async () => {
+    if (!user) return;
+    try {
+      let headers: Record<string, string> = { "Content-Type": "application/json" };
+      let session = null;
+      if (isSupabaseConfigured && supabase) {
+        const sessionResult = await supabase.auth.getSession();
+        session = sessionResult.data.session;
+      }
+
+      if (session) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      } else {
+        headers["x-mock-user-id"] = user.id;
+      }
+
+      const res = await fetch("/api/integrations/line/connect", {
+        method: "POST",
+        headers,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          if (!session) {
+            // Mock connection: redirect directly to callback
+            window.location.href = `/api/integrations/line/callback?code=mock_code&state=${data.url.split("state=")[1].split("&")[0]}`;
+          } else {
+            window.location.href = data.url;
+          }
+        }
+      } else {
+        toast("Failed to initiate LINE connection", "error");
+      }
+    } catch (err) {
+      toast("Error initiating LINE connection", "error");
+    }
+  };
+
+  const handleDisconnectLine = async () => {
+    if (!user) return;
+    try {
+      let headers: Record<string, string> = { "Content-Type": "application/json" };
+      let session = null;
+      if (isSupabaseConfigured && supabase) {
+        const sessionResult = await supabase.auth.getSession();
+        session = sessionResult.data.session;
+      }
+
+      if (session) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      } else {
+        headers["x-mock-user-id"] = user.id;
+      }
+
+      const res = await fetch("/api/integrations/line", {
+        method: "DELETE",
+        headers,
+      });
+
+      if (res.ok) {
+        setLineConnected(false);
+        setLineDisplayName("");
+        setLinePictureUrl("");
+        setLineConnectedAt("");
+        if (!session) {
+          localStorage.removeItem("mock_line_connected");
+          localStorage.removeItem("mock_line_display_name");
+          localStorage.removeItem("mock_line_picture_url");
+        }
+        toast(t("settings.lineDisconnectSuccess"), "success");
+      } else {
+        toast("Failed to disconnect LINE account", "error");
+      }
+    } catch (err) {
+      toast("Error disconnecting LINE account", "error");
+    }
+  };
+
+  const handleUpdateLinePref = async (key: "watering" | "fertilizer" | "plantHealth", value: boolean) => {
+    const updated = { ...linePrefs, [key]: value };
+    setLinePrefs(updated);
+
+    if (!user) return;
+    setUpdatingLinePrefs(true);
+    try {
+      let headers: Record<string, string> = { "Content-Type": "application/json" };
+      let session = null;
+      if (isSupabaseConfigured && supabase) {
+        const sessionResult = await supabase.auth.getSession();
+        session = sessionResult.data.session;
+      }
+
+      if (session) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      } else {
+        headers["x-mock-user-id"] = user.id;
+      }
+
+      const res = await fetch("/api/integrations/line", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ preferences: updated }),
+      });
+
+      if (res.ok) {
+        if (!session) {
+          localStorage.setItem("mock_line_preferences", JSON.stringify(updated));
+        }
+        toast(t("settings.linePreferencesSuccess"), "success");
+      } else {
+        toast("Failed to update preferences", "error");
+      }
+    } catch (err) {
+      toast("Error updating preferences", "error");
+    } finally {
+      setUpdatingLinePrefs(false);
+    }
+  };
 
   const handleDistrictChange = (value: string) => {
     setSelectedDistrict(value);
@@ -327,7 +537,124 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Section 3: LINE Integration */}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-4">
+            <h2 className="text-sm font-extrabold text-zinc-850 dark:text-zinc-200 flex items-center gap-2 border-b border-zinc-150 dark:border-zinc-850 pb-2.5">
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[#06C755]/10 text-[#06C755]">
+                <svg className="h-4.5 w-4.5 fill-current" viewBox="0 0 24 24">
+                  <path d="M24 10.304c0-5.369-5.383-9.738-12-9.738-6.616 0-12 4.369-12 9.738 0 4.814 4.269 8.846 10.036 9.564.39.084.922.258 1.057.592.12.3.079.769.038 1.072l-.171 1.026c-.052.312-.252 1.22.1 1.394.351.173 1.157-.531 1.625-.975 1.124-1.068 3.109-3.738 4.237-5.388 3.197-2.312 5.078-4.99 5.078-7.705zm-15.011 3.513h-2.18c-.287 0-.52-.233-.52-.52v-4.385c0-.287.233-.52.52-.52h2.18c.287 0 .52.233.52.52v.69c0 .287-.233.52-.52.52H7.989v.91h1.53c.287 0 .52.233.52.52v.69c0 .287-.233.52-.52.52h-1.53v.91h2.01c.287 0 .52.233.52.52v.69c0 .287-.233.52-.52.52zm3.398 0h-2.18c-.287 0-.52-.233-.52-.52v-4.385c0-.287.233-.52.52-.52h.69c.287 0 .52.233.52.52v3.695h1.49c.287 0 .52.233.52.52v.69c0 .287-.233.52-.52.52zm1.696-.52v-4.385c0-.287.233-.52.52-.52h.69c.287 0 .52.233.52.52v4.385c0 .287-.233.52-.52.52h-.69c-.287 0-.52-.233-.52-.52zm6.262 0c0 .287-.233.52-.52.52h-1.92l-1.98-2.61v2.09c0 .287-.233.52-.52.52h-.69c-.287 0-.52-.233-.52-.52v-4.385c0-.287.233-.52.52-.52h.69c.287 0 .52.233.52.52v2.09l1.98-2.09c.14-.145.29-.21.46-.21h1.46c.36 0 .58.41.34.69l-1.58 1.66 1.83 2.45c.16.21.16.51 0 .69z" />
+                </svg>
+              </span>
+              {t("settings.lineSection")}
+            </h2>
 
+            {loadingLine ? (
+              <div className="flex items-center gap-2 text-zinc-400 py-4 text-xs font-semibold">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                กำลังโหลด... / Loading...
+              </div>
+            ) : lineConnected ? (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-zinc-50 dark:bg-zinc-950 p-4 border border-zinc-150 dark:border-zinc-850 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={linePictureUrl || "https://api.dicebear.com/7.x/adventurer/svg?seed=LINE"}
+                      alt="LINE profile"
+                      className="h-12 w-12 rounded-full border border-zinc-200 dark:border-zinc-800 object-cover bg-zinc-100"
+                    />
+                    <div>
+                      <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                        {lineDisplayName}
+                      </div>
+                      <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                        {t("settings.lineConnectedStatus")}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDisconnectLine}
+                    className="w-full sm:w-auto px-4 py-2 border border-red-200 hover:border-red-300 dark:border-red-950 dark:hover:border-red-900 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    {t("settings.lineDisconnectBtn")}
+                  </button>
+                </div>
+
+                {/* LINE Preferences */}
+                <div className="space-y-3 pt-2">
+                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                    {t("settings.linePreferencesTitle")}
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Watering */}
+                    <label className="flex items-center gap-2.5 p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-all select-none">
+                      <input
+                        type="checkbox"
+                        checked={linePrefs.watering}
+                        disabled={updatingLinePrefs}
+                        onChange={(e) => handleUpdateLinePref("watering", e.target.checked)}
+                        className="h-4.5 w-4.5 rounded-sm border-zinc-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                        {t("settings.linePrefWatering")}
+                      </span>
+                    </label>
+
+                    {/* Fertilizer */}
+                    <label className="flex items-center gap-2.5 p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-all select-none">
+                      <input
+                        type="checkbox"
+                        checked={linePrefs.fertilizer}
+                        disabled={updatingLinePrefs}
+                        onChange={(e) => handleUpdateLinePref("fertilizer", e.target.checked)}
+                        className="h-4.5 w-4.5 rounded-sm border-zinc-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                        {t("settings.linePrefFertilizer")}
+                      </span>
+                    </label>
+
+                    {/* Plant Health */}
+                    <label className="flex items-center gap-2.5 p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-all select-none">
+                      <input
+                        type="checkbox"
+                        checked={linePrefs.plantHealth}
+                        disabled={updatingLinePrefs}
+                        onChange={(e) => handleUpdateLinePref("plantHealth", e.target.checked)}
+                        className="h-4.5 w-4.5 rounded-sm border-zinc-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                        {t("settings.linePrefPlantHealth")}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-zinc-50 dark:bg-zinc-950 p-4 border border-zinc-150 dark:border-zinc-850 rounded-xl">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                    {t("settings.lineDisconnectedStatus")}
+                  </div>
+                  <p className="text-[11px] text-zinc-400 font-semibold">
+                    เชื่อมต่อบัญชีไลน์ของคุณ เพื่อรับการแจ้งเตือนงานดูแลต้นไม้ในแต่ละวัน
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleConnectLine}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-[#06C755] hover:bg-[#05b34c] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M24 10.304c0-5.369-5.383-9.738-12-9.738-6.616 0-12 4.369-12 9.738 0 4.814 4.269 8.846 10.036 9.564.39.084.922.258 1.057.592.12.3.079.769.038 1.072l-.171 1.026c-.052.312-.252 1.22.1 1.394.351.173 1.157-.531 1.625-.975 1.124-1.068 3.109-3.738 4.237-5.388 3.197-2.312 5.078-4.99 5.078-7.705z" />
+                  </svg>
+                  {t("settings.lineConnectBtn")}
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Submit Action */}
           <div className="flex justify-end">
