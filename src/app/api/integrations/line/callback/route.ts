@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { isSupabaseConfigured, supabase, getSupabaseAdminClient } from "@/services/supabase";
+import { triggerLineNotification } from "@/services/notification.service";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -126,6 +127,16 @@ export async function GET(request: Request) {
       cookieStore.set("mock_line_display_name", displayName, { maxAge: 86400 * 30, path: "/" });
       cookieStore.set("mock_line_picture_url", pictureUrl || "", { maxAge: 86400 * 30, path: "/" });
     }
+
+    // Send welcome notification asynchronously
+    const welcomeMsg = `🎉 เชื่อมต่อบัญชี Plant Tracker กับ LINE สำเร็จแล้ว!\n\nคุณจะได้รับการแจ้งเตือนตารางรดน้ำ ใส่ปุ๋ย และรายงานสุขภาพพืชของคุณผ่านทางช่องแชทนี้ครับ 🪴`;
+    (async () => {
+      try {
+        await triggerLineNotification(userId, "plantHealth", welcomeMsg);
+      } catch (err) {
+        console.error("Failed to send welcome LINE notification:", err);
+      }
+    })();
 
     // Redirect with success!
     return NextResponse.redirect(`${appUrl}/settings?line=connected`);
