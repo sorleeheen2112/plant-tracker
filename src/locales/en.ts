@@ -344,6 +344,7 @@ export const en = {
     linePrefWatering: "Watering Reminders",
     linePrefFertilizer: "Fertilizer Reminders",
     linePrefPlantHealth: "Plant Health Alerts",
+    linePrefPestControl: "Pest Control Reminders",
     lineConnectSuccess: "Connected to LINE successfully!",
     lineDisconnectSuccess: "Disconnected from LINE successfully.",
     linePreferencesSuccess: "Notification preferences updated successfully.",

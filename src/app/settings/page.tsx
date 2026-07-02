@@ -49,7 +49,7 @@ export default function SettingsPage() {
   const [lineDisplayName, setLineDisplayName] = useState("");
   const [linePictureUrl, setLinePictureUrl] = useState("");
   const [lineConnectedAt, setLineConnectedAt] = useState("");
-  const [linePrefs, setLinePrefs] = useState({ watering: true, fertilizer: true, plantHealth: true });
+  const [linePrefs, setLinePrefs] = useState({ watering: true, fertilizer: true, plantHealth: true, pestControl: true });
   const [loadingLine, setLoadingLine] = useState(true);
   const [updatingLinePrefs, setUpdatingLinePrefs] = useState(false);
 
@@ -116,7 +116,7 @@ export default function SettingsPage() {
         } else {
           headers["x-mock-user-id"] = user.id;
           headers["x-mock-line-connected"] = localStorage.getItem("mock_line_connected") || "false";
-          headers["x-mock-line-preferences"] = localStorage.getItem("mock_line_preferences") || JSON.stringify({ watering: true, fertilizer: true, plantHealth: true });
+          headers["x-mock-line-preferences"] = localStorage.getItem("mock_line_preferences") || JSON.stringify({ watering: true, fertilizer: true, plantHealth: true, pestControl: true });
         }
 
         const res = await fetch("/api/integrations/line", { headers });
@@ -126,7 +126,7 @@ export default function SettingsPage() {
           setLineDisplayName(data.displayName || "");
           setLinePictureUrl(data.pictureUrl || "");
           setLineConnectedAt(data.connectedAt || "");
-          setLinePrefs(data.preferences || { watering: true, fertilizer: true, plantHealth: true });
+          setLinePrefs(data.preferences || { watering: true, fertilizer: true, plantHealth: true, pestControl: true });
         }
       } catch (err) {
         console.error("Failed to fetch LINE status:", err);
@@ -233,7 +233,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdateLinePref = async (key: "watering" | "fertilizer" | "plantHealth", value: boolean) => {
+  const handleUpdateLinePref = async (key: "watering" | "fertilizer" | "plantHealth" | "pestControl", value: boolean) => {
     const updated = { ...linePrefs, [key]: value };
     setLinePrefs(updated);
 
@@ -587,7 +587,7 @@ export default function SettingsPage() {
                     {t("settings.linePreferencesTitle")}
                   </h3>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     {/* Watering */}
                     <label className="flex items-center gap-2.5 p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-all select-none">
                       <input
@@ -627,6 +627,20 @@ export default function SettingsPage() {
                       />
                       <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
                         {t("settings.linePrefPlantHealth")}
+                      </span>
+                    </label>
+
+                    {/* Pest Control */}
+                    <label className="flex items-center gap-2.5 p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-all select-none">
+                      <input
+                        type="checkbox"
+                        checked={linePrefs.pestControl}
+                        disabled={updatingLinePrefs}
+                        onChange={(e) => handleUpdateLinePref("pestControl", e.target.checked)}
+                        className="h-4.5 w-4.5 rounded-sm border-zinc-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                        {t("settings.linePrefPestControl")}
                       </span>
                     </label>
                   </div>

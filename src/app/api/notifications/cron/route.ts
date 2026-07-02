@@ -60,8 +60,10 @@ export async function GET(request: Request) {
 
       let needsWatering = false;
       let needsFertilizer = false;
+      let needsPestControl = false;
       const wateringPlants: string[] = [];
       const fertilizerPlants: string[] = [];
+      const pestControlPlants: string[] = [];
 
       for (const s of schedules) {
         // Cast plants join correctly
@@ -81,6 +83,9 @@ export async function GET(request: Request) {
           } else if (s.type === "fertilizing") {
             needsFertilizer = true;
             fertilizerPlants.push(plant.name);
+          } else if (s.type === "pest_control") {
+            needsPestControl = true;
+            pestControlPlants.push(plant.name);
           }
         }
       }
@@ -98,6 +103,14 @@ export async function GET(request: Request) {
         const plantsStr = fertilizerPlants.slice(0, 3).join(", ") + (fertilizerPlants.length > 3 ? "..." : "");
         const msg = `🌱 Plant Tracker\n\nถึงเวลาใส่ปุ๋ยต้นไม้ของคุณแล้ว: ${plantsStr}\n\nกรุณาใส่ปุ๋ยตามตารางการดูแลเพื่อการเติบโตที่ดีที่สุดครับ`;
         const res = await triggerLineNotification(userId, "fertilizer", msg);
+        if (res.success) sentCount++;
+      }
+
+      // 6. Send Pest Control Reminders
+      if (needsPestControl && !sentTypes.has("pestControl")) {
+        const plantsStr = pestControlPlants.slice(0, 3).join(", ") + (pestControlPlants.length > 3 ? "..." : "");
+        const msg = `🐛 Plant Tracker\n\nถึงเวลากำจัดศัตรูพืชสำหรับต้นไม้ของคุณแล้ว: ${plantsStr}\n\nกรุณาฉีดพ่นยากำจัดหรือป้องกันศัตรูพืชตามตารางเวลาครับ`;
+        const res = await triggerLineNotification(userId, "pestControl", msg);
         if (res.success) sentCount++;
       }
     }

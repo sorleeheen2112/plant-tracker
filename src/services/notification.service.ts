@@ -1,7 +1,7 @@
 import { sendText } from "./line.service";
 import { isSupabaseConfigured, supabase, getSupabaseAdminClient } from "./supabase";
 
-export type NotificationType = "watering" | "fertilizer" | "plantHealth";
+export type NotificationType = "watering" | "fertilizer" | "plantHealth" | "pestControl";
 
 export const triggerLineNotification = async (
   userId: string,

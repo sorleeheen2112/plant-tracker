@@ -346,6 +346,7 @@ export const th: TranslationType = {
     linePrefWatering: "แจ้งเตือนการรดน้ำ",
     linePrefFertilizer: "แจ้งเตือนการใส่ปุ๋ย",
     linePrefPlantHealth: "แจ้งเตือนสุขภาพพืช",
+    linePrefPestControl: "แจ้งเตือนกำจัดศัตรูพืช",
     lineConnectSuccess: "เชื่อมต่อกับบัญชี LINE เรียบร้อยแล้ว!",
     lineDisconnectSuccess: "ยกเลิกการเชื่อมต่อ LINE เรียบร้อยแล้ว",
     linePreferencesSuccess: "บันทึกการตั้งค่าการแจ้งเตือนสำเร็จ",
