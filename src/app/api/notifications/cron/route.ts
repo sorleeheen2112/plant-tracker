@@ -71,8 +71,11 @@ export async function GET(request: Request) {
         if (!plant || plant.archived) continue;
 
         // Calculate task status (due / overdue)
-        const nextDue = s.next_due_date ? new Date(s.next_due_date) : null;
-        if (!nextDue) continue;
+        // Note: next_due_date is a client-side calculated field and is not stored in the database.
+        // We calculate nextDue here based on last_performed (or start_date) and interval_days.
+        const base = s.last_performed ? new Date(s.last_performed) : new Date(s.start_date);
+        const nextDue = new Date(base);
+        nextDue.setDate(nextDue.getDate() + s.interval_days);
 
         const isDueOrOverdue = nextDue.getTime() <= Date.now();
 
