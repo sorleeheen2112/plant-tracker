@@ -2888,17 +2888,43 @@ export const logFertilizationDirect = async (
       .from("schedules")
       .select("*")
       .eq("plant_id", plantId)
-      .eq("fertilizer_id", fertilizerId)
       .eq("type", "fertilizing");
-    if (data && data.length > 0) scheduleToUpdate = data[0];
+    if (data && data.length > 0) {
+      const exactMatch = data.find(s => s.fertilizer_id === fertilizerId);
+      if (exactMatch) {
+        scheduleToUpdate = exactMatch;
+      } else {
+        const genericMatch = data.find(s => !s.fertilizer_id);
+        if (genericMatch) {
+          scheduleToUpdate = genericMatch;
+        } else {
+          scheduleToUpdate = data[0];
+        }
+      }
+    }
   } else {
     const db = loadLocalDatabase(user.id);
-    const found = db.schedules.find(s => s.plant_id === plantId && s.fertilizer_id === fertilizerId && s.type === "fertilizing");
-    if (found) scheduleToUpdate = found;
+    const plantScheds = db.schedules.filter(s => s.plant_id === plantId && s.type === "fertilizing");
+    if (plantScheds.length > 0) {
+      const exactMatch = plantScheds.find(s => s.fertilizer_id === fertilizerId);
+      if (exactMatch) {
+        scheduleToUpdate = exactMatch;
+      } else {
+        const genericMatch = plantScheds.find(s => !s.fertilizer_id);
+        if (genericMatch) {
+          scheduleToUpdate = genericMatch;
+        } else {
+          scheduleToUpdate = plantScheds[0];
+        }
+      }
+    }
   }
 
   if (scheduleToUpdate) {
-    await updateSchedule(scheduleToUpdate.id, { last_performed: applied_date });
+    await updateSchedule(scheduleToUpdate.id, {
+      last_performed: applied_date,
+      ...(!scheduleToUpdate.fertilizer_id ? { fertilizer_id: fertilizerId } : {})
+    });
   }
 
   const plant = dbPlants.find(p => p.id === plantId);

@@ -451,6 +451,7 @@ function PlantsContent() {
 
   const handlePerformSchedule = async (id: string) => {
     try {
+      await performSchedule(id, new Date().toISOString());
       toast(t("schedules.taskCompletedMsg"), "success");
       loadData();
     } catch (err) {
