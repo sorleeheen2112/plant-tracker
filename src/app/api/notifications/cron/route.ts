@@ -96,7 +96,7 @@ export async function GET(request: Request) {
       // 4. Send Watering Reminders
       if (needsWatering && !sentTypes.has("watering")) {
         const plantsStr = wateringPlants.slice(0, 3).join(", ") + (wateringPlants.length > 3 ? "..." : "");
-        const msg = `🪴 Plant Tracker\n\nถึงเวลารดน้ำต้นไม้ของคุณแล้ว: ${plantsStr}\n\nเปิดแอปเพื่อบันทึกประวัติการรดน้ำของคุณได้เลยครับ`;
+        const msg = `🌱 Plant Tracker\n\n 💧🌱 ถึงเวลารดน้ำต้นไม้ของคุณแล้ว: ${plantsStr}\n\nเปิดแอปเพื่อบันทึกประวัติการรดน้ำของคุณได้เลยครับ\n\n🌹🍀🌸🌿🪴`;
         const res = await triggerLineNotification(userId, "watering", msg);
         if (res.success) sentCount++;
       }
@@ -104,7 +104,7 @@ export async function GET(request: Request) {
       // 5. Send Fertilizing Reminders
       if (needsFertilizer && !sentTypes.has("fertilizer")) {
         const plantsStr = fertilizerPlants.slice(0, 3).join(", ") + (fertilizerPlants.length > 3 ? "..." : "");
-        const msg = `🌱 Plant Tracker\n\nถึงเวลาใส่ปุ๋ยต้นไม้ของคุณแล้ว: ${plantsStr}\n\nกรุณาใส่ปุ๋ยตามตารางการดูแลเพื่อการเติบโตที่ดีที่สุดครับ`;
+        const msg = `🌱 Plant Tracker\n\n  🌼🌱ถึงเวลาใส่ปุ๋ยต้นไม้ของคุณแล้ว: ${plantsStr}\n\nกรุณาใส่ปุ๋ยตามตารางการดูแลเพื่อการเติบโตที่ดีที่สุดครับ\n\n🌹🍀🌸🌿🪴`;
         const res = await triggerLineNotification(userId, "fertilizer", msg);
         if (res.success) sentCount++;
       }
@@ -112,7 +112,7 @@ export async function GET(request: Request) {
       // 6. Send Pest Control Reminders
       if (needsPestControl && !sentTypes.has("pestControl")) {
         const plantsStr = pestControlPlants.slice(0, 3).join(", ") + (pestControlPlants.length > 3 ? "..." : "");
-        const msg = `🐛 Plant Tracker\n\nถึงเวลากำจัดศัตรูพืชสำหรับต้นไม้ของคุณแล้ว: ${plantsStr}\n\nกรุณาฉีดพ่นยากำจัดหรือป้องกันศัตรูพืชตามตารางเวลาครับ`;
+        const msg = `🌱 Plant Tracker\n\n  🐛🌱ถึงเวลากำจัดศัตรูพืชสำหรับต้นไม้ของคุณแล้ว: ${plantsStr}\n\nกรุณาฉีดพ่นยากำจัดหรือป้องกันศัตรูพืชตามตารางเวลาครับ\n\n🌹🍀🌸🌿🪴`;
         const res = await triggerLineNotification(userId, "pestControl", msg);
         if (res.success) sentCount++;
       }
