@@ -2090,11 +2090,12 @@ export const performSchedule = async (
   if (!found) throw new Error("Schedule not found");
 
   let targetFertId = fertilizerId || found.fertilizer_id;
+  let targetIntervalDays = found.interval_days;
   let finalDetails = customDetails;
 
   if (found.type === "fertilizing") {
+    const fertilizers = await getFertilizers(true);
     if (!targetFertId) {
-      const fertilizers = await getFertilizers();
       if (fertilizers.length > 0) {
         targetFertId = fertilizers[0].id;
       } else {
@@ -2110,9 +2111,12 @@ export const performSchedule = async (
       }
     }
 
+    const fertInfo = fertilizers.find(f => f.id === targetFertId);
+    if (fertInfo) {
+      targetIntervalDays = fertInfo.default_interval_days;
+    }
+
     if (!finalDetails) {
-      const fertilizers = await getFertilizers(true);
-      const fertInfo = fertilizers.find(f => f.id === targetFertId);
       const fertLabel = fertInfo ? `${fertInfo.name} (${fertInfo.npk_formula})` : "Fertilizer";
       finalDetails = `ใส่ปุ๋ย: ${fertLabel}${fertilizerAmount ? ` — ${fertilizerAmount}` : ""}`;
     }
@@ -2132,7 +2136,8 @@ export const performSchedule = async (
   // Update schedule
   const updated = await updateSchedule(found.id, {
     last_performed: dateStr,
-    fertilizer_id: found.type === "fertilizing" ? targetFertId : undefined
+    fertilizer_id: found.type === "fertilizing" ? targetFertId : undefined,
+    interval_days: found.type === "fertilizing" ? targetIntervalDays : found.interval_days
   });
 
   return updated;
@@ -2811,9 +2816,12 @@ export const applyFertilizer = async (
     schedule = found;
   }
 
-  const updatedSchedule = await updateSchedule(schedule.id, { last_performed: applied_date });
-
   const fertInfo = dbFertilizers.find(f => f.id === schedule.fertilizer_id);
+  const updatedSchedule = await updateSchedule(schedule.id, { 
+    last_performed: applied_date,
+    interval_days: fertInfo ? fertInfo.default_interval_days : schedule.interval_days
+  });
+
   const fertLabel = fertInfo ? `${fertInfo.name} (${fertInfo.npk_formula})` : "Fertilizer";
 
   const newActivity = await createActivity({
@@ -2923,7 +2931,8 @@ export const logFertilizationDirect = async (
   if (scheduleToUpdate) {
     await updateSchedule(scheduleToUpdate.id, {
       last_performed: applied_date,
-      ...(!scheduleToUpdate.fertilizer_id ? { fertilizer_id: fertilizerId } : {})
+      fertilizer_id: fertilizerId,
+      interval_days: fertInfo ? fertInfo.default_interval_days : scheduleToUpdate.interval_days
     });
   }
 
