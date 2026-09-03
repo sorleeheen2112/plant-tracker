@@ -233,6 +233,11 @@ export const en = {
     noActivitiesDescription: "No matching care activities found. Log a care action to start tracking!",
     bulk_watering: "Water All",
     bulkWateringDetail: "Watered all {count} plants",
+    deleteActivity: "Delete Activity",
+    deleteConfirmTitle: "Confirm Delete Activity",
+    deleteConfirmDesc: "Are you sure you want to delete this activity? If linked to a calendar schedule, the schedule cycle will be automatically updated.",
+    deleteSuccess: "Activity deleted and calendar schedule updated.",
+    deleteError: "Failed to delete activity",
   },
   schedules: {
     title: "Recurring Schedules",

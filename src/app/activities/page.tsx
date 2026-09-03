@@ -12,6 +12,7 @@ import {
   getActivities,
   getPlants,
   createActivity,
+  deleteActivity,
   Activity,
   Plant,
   ActivityType
@@ -28,7 +29,9 @@ import {
   Eye,
   Flower,
   Sprout,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Trash2,
+  AlertTriangle
 } from "lucide-react";
 
 export default function ActivitiesPage() {
@@ -45,7 +48,6 @@ export default function ActivitiesPage() {
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("all");
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>("all");
 
-
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [plantId, setPlantId] = useState("");
@@ -54,6 +56,10 @@ export default function ActivitiesPage() {
   const [actDetails, setActDetails] = useState("");
   const [actNotes, setActNotes] = useState("");
   const [actPhoto, setActPhoto] = useState("");
+
+  // Delete State
+  const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadData = async () => {
     try {
@@ -102,6 +108,21 @@ export default function ActivitiesPage() {
       loadData();
     } catch (err) {
       toast(t("activities.createError"), "error");
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!activityToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteActivity(activityToDelete.id);
+      toast(t("activities.deleteSuccess"), "success");
+      setActivityToDelete(null);
+      await loadData();
+    } catch (err) {
+      toast(t("activities.deleteError"), "error");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -207,7 +228,7 @@ export default function ActivitiesPage() {
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-xs">
             <div className="relative border-l-2 border-zinc-100 dark:border-zinc-850 pl-6 ml-2 space-y-6">
               {filteredActivities.map((act) => (
-                <div key={act.id} className="relative">
+                <div key={act.id} className="relative group">
                   {/* Styled bullet bullet type */}
                   <span className={`absolute -left-[32px] top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border-2 shadow-xs ${
                     act.type === "bulk_watering" ? "border-blue-500" : "border-emerald-500"
@@ -246,6 +267,15 @@ export default function ActivitiesPage() {
                           minute: "2-digit"
                         })}
                       </span>
+
+                      {/* Delete button */}
+                      <button
+                        onClick={() => setActivityToDelete(act)}
+                        className="opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
+                        title={t("activities.deleteActivity")}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
 
                     <p className="text-sm font-semibold text-zinc-655 dark:text-zinc-300 leading-relaxed">
@@ -361,6 +391,49 @@ export default function ActivitiesPage() {
               </button>
             </div>
           </form>
+        </Modal>
+
+        {/* DELETE CONFIRMATION MODAL */}
+        <Modal
+          isOpen={!!activityToDelete}
+          onClose={() => setActivityToDelete(null)}
+          title={t("activities.deleteConfirmTitle")}
+        >
+          {activityToDelete && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 rounded-xl">
+                <AlertTriangle className="h-5 w-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-rose-900 dark:text-rose-200">
+                    {t("activities.deleteConfirmDesc")}
+                  </p>
+                  <p className="text-xs text-rose-700 dark:text-rose-400 font-medium">
+                    {activityToDelete.plant_name} — {t(`activities.${activityToDelete.type}`)} ({new Date(activityToDelete.date).toLocaleDateString(language === "th" ? "th-TH" : "en-US", { month: "short", day: "numeric", year: "numeric" })})
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActivityToDelete(null)}
+                  disabled={deleting}
+                  className="px-4 py-2 text-xs font-bold border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteConfirm}
+                  disabled={deleting}
+                  className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-sm cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deleting ? (language === "th" ? "กำลังลบ..." : "Deleting...") : t("activities.deleteActivity")}
+                </button>
+              </div>
+            </div>
+          )}
         </Modal>
 
         {/* PHOTO PREVIEW MODAL */}

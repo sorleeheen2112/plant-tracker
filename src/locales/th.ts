@@ -235,6 +235,11 @@ export const th: TranslationType = {
     noActivitiesDescription: "ไม่พบกิจกรรมดูแลที่ตรงกัน ลองบันทึกกิจกรรมการดูแลเพื่อเริ่มติดตามข้อมูล!",
     bulk_watering: "รดน้ำทั้งหมด",
     bulkWateringDetail: "รดน้ำต้นไม้ทั้งหมดจำนวน {count} ต้น",
+    deleteActivity: "ลบกิจกรรม",
+    deleteConfirmTitle: "ยืนยันการลบกิจกรรม",
+    deleteConfirmDesc: "คุณแน่ใจหรือไม่ว่าต้องการลบกิจกรรมนี้? หากกิจกรรมนี้มีผลต่อรอบในปฏิทิน ระบบจะปรับรอบกำหนดการย้อนกลับให้อัตโนมัติ",
+    deleteSuccess: "ลบกิจกรรมและปรับปรุงปฏิทินเรียบร้อยแล้ว",
+    deleteError: "เกิดข้อผิดพลาดในการลบกิจกรรม",
   },
   schedules: {
     title: "ตารางเวลาการดูแลประจำ",

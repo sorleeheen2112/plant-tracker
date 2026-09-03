@@ -22,6 +22,7 @@ import {
   deletePlant,
   archivePlant,
   createActivity,
+  deleteActivity,
   createSchedule,
   deleteSchedule,
   performSchedule,
@@ -195,6 +196,10 @@ function PlantsContent() {
   const [actDetails, setActDetails] = useState("");
   const [actNotes, setActNotes] = useState("");
   const [actPhoto, setActPhoto] = useState("");
+
+  // Delete Activity State (within detail tab)
+  const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
+  const [deletingActivity, setDeletingActivity] = useState(false);
 
   // Fertilizer tab states
   const [fertLibrary, setFertLibrary] = useState<Fertilizer[]>([]);
@@ -487,6 +492,21 @@ function PlantsContent() {
       loadData();
     } catch (err) {
       toast(t("activities.createError"), "error");
+    }
+  };
+
+  const handleDeleteActivityConfirm = async () => {
+    if (!activityToDelete) return;
+    setDeletingActivity(true);
+    try {
+      await deleteActivity(activityToDelete.id);
+      toast(t("activities.deleteSuccess"), "success");
+      setActivityToDelete(null);
+      await loadData();
+    } catch (err) {
+      toast(t("activities.deleteError"), "error");
+    } finally {
+      setDeletingActivity(false);
     }
   };
 
@@ -832,13 +852,13 @@ function PlantsContent() {
                   ) : (
                     <div className="relative border-l-2 border-zinc-100 dark:border-zinc-850 pl-5 ml-2.5 space-y-6">
                       {activities.map((act) => (
-                        <div key={act.id} className="relative">
+                        <div key={act.id} className="relative group">
                           <span className={`absolute -left-[30px] top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border-2 shadow-xs ${getActivityBorderClass(act.type)}`}>
                             {getActivityIcon(act.type)}
                           </span>
                           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 bg-zinc-50/10 dark:bg-zinc-950/5 border border-zinc-100 dark:border-zinc-850/50 p-4 rounded-xl hover:border-zinc-200 dark:hover:border-zinc-800 transition-colors">
-                            <div className="space-y-1.5">
-                              <div className="flex items-center gap-2">
+                            <div className="space-y-1.5 flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase font-semibold ${getActivityBadgeClass(act.type)}`}>
                                   {t(`activities.${act.type}`)}
                                 </span>
@@ -850,6 +870,14 @@ function PlantsContent() {
                                     minute: "2-digit"
                                   })}
                                 </span>
+
+                                <button
+                                  onClick={() => setActivityToDelete(act)}
+                                  className="opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer ml-auto"
+                                  title={t("activities.deleteActivity")}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
                               </div>
                               <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
                                 {act.details}
@@ -1283,6 +1311,49 @@ function PlantsContent() {
                 </button>
               </div>
             </form>
+          </Modal>
+
+          {/* DELETE ACTIVITY CONFIRMATION MODAL */}
+          <Modal
+            isOpen={!!activityToDelete}
+            onClose={() => setActivityToDelete(null)}
+            title={t("activities.deleteConfirmTitle")}
+          >
+            {activityToDelete && (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 rounded-xl">
+                  <Trash2 className="h-5 w-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-rose-900 dark:text-rose-200">
+                      {t("activities.deleteConfirmDesc")}
+                    </p>
+                    <p className="text-xs text-rose-700 dark:text-rose-400 font-medium">
+                      {t(`activities.${activityToDelete.type}`)} — {activityToDelete.details} ({new Date(activityToDelete.date).toLocaleDateString(language === "th" ? "th-TH" : "en-US", { month: "short", day: "numeric", year: "numeric" })})
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setActivityToDelete(null)}
+                    disabled={deletingActivity}
+                    className="px-4 py-2 text-xs font-bold border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteActivityConfirm}
+                    disabled={deletingActivity}
+                    className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-sm cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {deletingActivity ? (language === "th" ? "กำลังลบ..." : "Deleting...") : t("activities.deleteActivity")}
+                  </button>
+                </div>
+              </div>
+            )}
           </Modal>
 
           {/* APPLY FERTILIZER MODAL */}

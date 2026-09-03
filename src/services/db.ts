@@ -1892,6 +1892,21 @@ export const createActivity = async (activity: Omit<Activity, "id" | "user_id" |
       } catch (err) {
         console.warn("Failed to update plant updated_at during activity logging:", err);
       }
+
+      try {
+        let schedQuery = supabase
+          .from("schedules")
+          .update({ last_performed: activityDate })
+          .eq("user_id", user.id)
+          .eq("plant_id", activity.plant_id)
+          .eq("type", activity.type);
+        if (activity.fertilizer_id) {
+          schedQuery = schedQuery.eq("fertilizer_id", activity.fertilizer_id);
+        }
+        await schedQuery;
+      } catch (err) {
+        console.warn("Failed to update schedule last_performed in Supabase:", err);
+      }
     }
 
     return newActivity;
@@ -1910,7 +1925,7 @@ export const createActivity = async (activity: Omit<Activity, "id" | "user_id" |
     const allScheds = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
     const updated = allScheds.map(s => {
       if (s.plant_id === activity.plant_id && s.type === activity.type && s.user_id === user.id) {
-        if (s.type === "fertilizing" && s.fertilizer_id !== activity.fertilizer_id) {
+        if (s.type === "fertilizing" && s.fertilizer_id && activity.fertilizer_id && s.fertilizer_id !== activity.fertilizer_id) {
           return s;
         }
         return { ...s, last_performed: activityDate };
@@ -1936,18 +1951,159 @@ export const deleteActivity = async (id: string): Promise<void> => {
   if (!user) throw new Error("Not authenticated");
 
   if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase
+    // 1. Fetch the activity to be deleted
+    const { data: actData } = await supabase
       .from("activities")
-      .delete()
+      .select("*")
       .eq("id", id)
-      .eq("user_id", user.id);
-    if (error) throw error;
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (actData) {
+      // Delete from activities table
+      const { error: delError } = await supabase
+        .from("activities")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (delError) throw delError;
+
+      // Delete corresponding entry in fertilizer_history if applicable
+      if (actData.type === "fertilizing") {
+        try {
+          await supabase
+            .from("fertilizer_history")
+            .delete()
+            .eq("user_id", user.id)
+            .eq("plant_id", actData.plant_id)
+            .eq("applied_date", actData.date);
+        } catch (err) {
+          console.warn("Failed to clean up fertilizer_history:", err);
+        }
+      }
+
+      // Re-sync schedule last_performed and calendar
+      if (actData.plant_id && actData.plant_id !== "bulk") {
+        let remQuery = supabase
+          .from("activities")
+          .select("date")
+          .eq("user_id", user.id)
+          .eq("plant_id", actData.plant_id)
+          .eq("type", actData.type)
+          .order("date", { ascending: false })
+          .limit(1);
+
+        if (actData.fertilizer_id) {
+          remQuery = remQuery.eq("fertilizer_id", actData.fertilizer_id);
+        }
+
+        const { data: remActivities } = await remQuery;
+        const newLastPerformed = remActivities && remActivities.length > 0 ? remActivities[0].date : null;
+
+        let schedUpdateQuery = supabase
+          .from("schedules")
+          .update({ last_performed: newLastPerformed })
+          .eq("user_id", user.id)
+          .eq("plant_id", actData.plant_id)
+          .eq("type", actData.type);
+
+        if (actData.fertilizer_id) {
+          schedUpdateQuery = schedUpdateQuery.eq("fertilizer_id", actData.fertilizer_id);
+        }
+
+        await schedUpdateQuery;
+
+        if (actData.type === "watering") {
+          await supabase
+            .from("plants")
+            .update({ last_watered_at: newLastPerformed })
+            .eq("id", actData.plant_id)
+            .eq("user_id", user.id);
+          invalidatePlantsCache();
+        }
+      }
+      return;
+    }
+
+    // Check if it's a bulk watering history entry
+    const { data: bulkData } = await supabase
+      .from("bulk_watering_history")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (bulkData) {
+      const { error: delBulkErr } = await supabase
+        .from("bulk_watering_history")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (delBulkErr) throw delBulkErr;
+      return;
+    }
+
     return;
   }
 
   // Local Storage Fallback
+  const storedBulk = getLocalStorageData<{ id: string; user_id: string; watered_at: string; affected_plants_count: number; created_at: string }>("plant_tracker_bulk_watering_history", []);
+  const isBulk = storedBulk.some(b => b.id === id && b.user_id === user.id);
+  if (isBulk) {
+    saveLocalStorageData(
+      "plant_tracker_bulk_watering_history",
+      storedBulk.filter(b => !(b.id === id && b.user_id === user.id))
+    );
+    return;
+  }
+
   const allActivities = getLocalStorageData<Activity>(ACTIVITIES_KEY, DEFAULT_ACTIVITIES(user.id));
-  saveLocalStorageData(ACTIVITIES_KEY, allActivities.filter(a => !(a.id === id && a.user_id === user.id)));
+  const targetActivity = allActivities.find(a => a.id === id && a.user_id === user.id);
+  if (!targetActivity) return;
+
+  const remainingActivities = allActivities.filter(a => !(a.id === id && a.user_id === user.id));
+  saveLocalStorageData(ACTIVITIES_KEY, remainingActivities);
+
+  if (targetActivity.type === "fertilizing") {
+    const fertHistory = getLocalStorageData<FertilizerHistory>("plant_tracker_fertilizer_history", []);
+    saveLocalStorageData(
+      "plant_tracker_fertilizer_history",
+      fertHistory.filter(fh => !(fh.user_id === user.id && fh.plant_id === targetActivity.plant_id && fh.applied_date === targetActivity.date))
+    );
+  }
+
+  // Re-sync schedule last_performed and calendar
+  if (targetActivity.plant_id && targetActivity.plant_id !== "bulk") {
+    const sameTypeRemaining = remainingActivities
+      .filter(a => a.user_id === user.id && a.plant_id === targetActivity.plant_id && a.type === targetActivity.type && (!targetActivity.fertilizer_id || a.fertilizer_id === targetActivity.fertilizer_id))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const newLastPerformed = sameTypeRemaining.length > 0 ? sameTypeRemaining[0].date : null;
+
+    const allSchedules = getLocalStorageData<Schedule>(SCHEDULES_KEY, DEFAULT_SCHEDULES(user.id));
+    const updatedSchedules = allSchedules.map(s => {
+      if (s.user_id === user.id && s.plant_id === targetActivity.plant_id && s.type === targetActivity.type) {
+        if (s.type === "fertilizing" && targetActivity.fertilizer_id && s.fertilizer_id && s.fertilizer_id !== targetActivity.fertilizer_id) {
+          return s;
+        }
+        return { ...s, last_performed: newLastPerformed };
+      }
+      return s;
+    });
+    saveLocalStorageData(SCHEDULES_KEY, updatedSchedules);
+
+    if (targetActivity.type === "watering") {
+      const allPlants = getLocalStorageData<Plant>(PLANTS_KEY, DEFAULT_PLANTS(user.id));
+      const updatedPlants = allPlants.map(p => {
+        if (p.id === targetActivity.plant_id && p.user_id === user.id) {
+          return { ...p, last_watered_at: newLastPerformed };
+        }
+        return p;
+      });
+      saveLocalStorageData(PLANTS_KEY, updatedPlants);
+      invalidatePlantsCache();
+    }
+  }
 };
 
 export const getSchedules = async (
